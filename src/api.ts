@@ -44,19 +44,25 @@ export const api = {
     unlink: () => req<{ ok: true }>('/api/telegram/unlink', { method: 'POST' }),
   },
   entries: () => req<{ entries: Entry[] }>('/api/entries'),
-  createFolder: (name: string, color: string, parentId: string | null) =>
-    req<{ entry: Entry }>('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parentId }) }),
+  createFolder: (name: string, color: string, parentId: string | null, vault = false) =>
+    req<{ entry: Entry }>('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parentId, vault }) }),
   patch: (id: string, patch: Record<string, unknown>) =>
     req<{ entry: Entry }>(`/api/entries/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   remove: (id: string, permanent = false) =>
     req<{ ok: true }>(`/api/entries/${id}${permanent ? '?permanent=1' : ''}`, { method: 'DELETE' }),
   restore: (id: string) => req<{ entry: Entry }>(`/api/entries/${id}/restore`, { method: 'POST' }),
   purge: () => req<{ ok: true }>('/api/trash/purge', { method: 'POST' }),
+  vault: {
+    setup: (pin: string) => req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/setup', { method: 'POST', body: JSON.stringify({ pin }) }),
+    unlock: (pin: string) => req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ pin }) }),
+    lock: () => req<{ ok: true; vaultUnlocked: false }>('/api/vault/lock', { method: 'POST' }),
+  },
   downloadUrl: (id: string) => `/api/files/${id}/download`,
   rawUrl: (id: string) => `/api/files/${id}/raw`,
   upload(
     file: File,
     parentId: string | null,
+    vault: boolean,
     onProgress: (percent: number) => void,
     onRegister?: (abort: () => void) => void
   ): Promise<Entry> {
@@ -64,6 +70,7 @@ export const api = {
       const form = new FormData();
       form.append('file', file);
       if (parentId) form.append('parentId', parentId);
+      if (vault) form.append('vault', 'true');
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/files');
       xhr.upload.onprogress = (event) => {

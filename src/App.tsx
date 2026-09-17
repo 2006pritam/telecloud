@@ -24,7 +24,7 @@ import Sidebar, { type View } from './components/Sidebar';
 import Topbar, { type SortKey } from './components/Topbar';
 import Toasts from './components/Toasts';
 import UploadPanel from './components/UploadPanel';
-import { ColorModal, ConfirmModal, MoveModal, NewFolderModal, PreviewModal, RenameModal } from './components/Modals';
+import { ColorModal, ConfirmModal, MoveModal, NewFolderModal, PreviewModal, RenameModal, VaultModal } from './components/Modals';
 import { formatBytes, pluralize } from './util';
 
 type ModalState =
@@ -33,6 +33,7 @@ type ModalState =
   | { kind: 'color'; entry: Entry }
   | { kind: 'move'; entry: Entry }
   | { kind: 'preview'; entry: Entry }
+  | { kind: 'vault' }
   | {
       kind: 'confirm';
       title: string;
@@ -166,7 +167,8 @@ export default function App() {
     const q = query.trim().toLowerCase();
     let items: Entry[];
     if (q) items = entries.filter((e) => !e.deleted_at && e.name.toLowerCase().includes(q));
-    else if (view.type === 'folder') items = entries.filter((e) => !e.deleted_at && e.parent_id === view.id);
+    else if (view.type === 'folder') items = entries.filter((e) => !e.deleted_at && !e.vault && e.parent_id === view.id);
+    else if (view.type === 'vault') items = entries.filter((e) => !e.deleted_at && e.vault && e.parent_id === null);
     else if (view.type === 'starred') items = entries.filter((e) => !e.deleted_at && e.starred);
     else items = entries.filter((e) => !!e.deleted_at && !e.trash_root);
     return [...items].sort((a, b) => {
@@ -203,6 +205,7 @@ export default function App() {
       if (list.length === 0) return;
       const epoch = sessionEpoch.current;
       const parentId = view.type === 'folder' ? view.id : null;
+      const inVault = view.type === 'vault';
       const limit = status?.maxUploadBytes ?? Infinity;
       for (const file of list) {
         // Catch oversized files here rather than after a long doomed upload.
@@ -219,6 +222,7 @@ export default function App() {
               await api.upload(
                 file,
                 parentId,
+                inVault,
                 (percent) => setUploads((current) => current.map((u) => (u.id === id ? { ...u, progress: percent } : u))),
                 (abort) => uploadAborts.current.set(id, abort)
               );
@@ -340,7 +344,7 @@ export default function App() {
           <NewFolderModal
             onClose={() => setModal(null)}
             onCreate={async (name, color) => {
-              await api.createFolder(name, color, view.type === 'folder' ? view.id : null);
+              await api.createFolder(name, color, view.type === 'folder' ? view.id : null, view.type === 'vault');
               await refresh();
               toast(`Folder “${name}” created.`, 'success');
               setModal(null);
@@ -387,6 +391,8 @@ export default function App() {
         );
       case 'preview':
         return <PreviewModal entry={modal.entry} onClose={() => setModal(null)} />;
+      case 'vault':
+        return <VaultModal setup={!(status?.vaultConfigured ?? false)} onClose={() => setModal(null)} onSubmit={async (pin) => { if (status?.vaultConfigured) await api.vault.unlock(pin); else await api.vault.setup(pin); setModal(null); await boot(); setView({ type: 'vault' }); toast('Secret Vault unlocked.', 'success'); }} />;
       case 'confirm':
         return (
           <ConfirmModal
@@ -416,7 +422,7 @@ export default function App() {
     }
     if (view.type === 'starred') return { title: 'No starred items', hint: 'Star the things you reach for most.' };
     if (view.type === 'trash') return { title: 'Trash is empty', hint: 'Deleted items will wait here until you empty it.' };
-    if (view.id) return { title: 'This folder is quiet', hint: 'Drop files here or press Upload.' };
+    if (view.type === 'folder' && view.id) return { title: 'This folder is quiet', hint: 'Drop files here or press Upload.' };
     if (entries.length === 0)
       return { title: 'A little space for everything', hint: 'Create your first folder or upload a file to get started.' };
     return { title: 'Nothing here yet', hint: 'Drop files here or press Upload.' };
@@ -456,9 +462,9 @@ export default function App() {
   }
 
   const state = emptyState();
-  const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : 'My Files';
-  const showUpload = !searching && view.type !== 'trash';
-  const showNewFolder = !searching && view.type === 'folder';
+  const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : view.type === 'vault' ? 'Secret Vault' : 'My Files';
+  const showUpload = !searching && view.type !== 'trash' && (view.type !== 'vault' || status.vaultUnlocked);
+  const showNewFolder = !searching && (view.type === 'folder' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
 
   return (
     <div className="shell">
@@ -498,6 +504,11 @@ export default function App() {
             },
           })
         }
+        onVault={() => {
+          if (status.vaultUnlocked) {
+            void api.vault.lock().then(() => boot()).catch((err) => toast(err instanceof Error ? err.message : 'Could not lock the vault.', 'error'));
+          } else setModal({ kind: 'vault' });
+        }}
       />
 
       <main

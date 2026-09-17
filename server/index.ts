@@ -3,7 +3,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -107,6 +107,7 @@ const phoneSchema = z.object({
 });
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{4,7}$/, 'Login codes are 5 digits.') });
 const twoFactorSchema = z.object({ password: z.string().min(1, 'Enter your two-step verification password.').max(256) });
+const vaultPinSchema = z.object({ pin: z.string().regex(/^\d{6}$/, 'Vault PIN must be exactly 6 digits.') });
 
 export type AppOptions = {
   dataDir?: string;
@@ -145,6 +146,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   const demo: Workspace | null = configured ? null : { store: new Store(dataDir, 'demo'), storage: null, telegram: null };
   demo?.store.seed();
   const requestWorkspaces = new WeakMap<Request, Workspace>();
+  const unlockedVaults = new Set<string>();
   function workspace(req: Request): Workspace {
     const current = requestWorkspaces.get(req);
     if (!current) throw new HttpError(401, 'Sign in with Telegram to continue.');
@@ -254,6 +256,33 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     const next = sessions.create(userId, true, ttl);
     res.cookie(COOKIE, next.token, { ...cookieOptions, maxAge: ttl });
     return next.session;
+  }
+
+  function vaultStore(req: Request): Store | null {
+    if (demo) return demo.store;
+    const browser = browserSession(req);
+    return browser?.userId ? accounts.get(browser.userId).store : null;
+  }
+
+  function vaultUnlocked(req: Request): boolean {
+    const browser = browserSession(req);
+    return !!browser && unlockedVaults.has(browser.id);
+  }
+
+  function requireVault(req: Request, entry: Entry) {
+    if (entry.vault && !vaultUnlocked(req)) throw new HttpError(423, 'Unlock the Secret Vault to access this item.');
+  }
+
+  function vaultHash(pin: string, salt = randomBytes(16).toString('hex')) {
+    return `${salt}:${scryptSync(pin, salt, 64).toString('hex')}`;
+  }
+
+  function verifyVaultPin(pin: string, stored: string) {
+    const [salt, expectedHex] = stored.split(':');
+    if (!salt || !expectedHex) return false;
+    const actual = scryptSync(pin, salt, 64);
+    const expected = Buffer.from(expectedHex, 'hex');
+    return expected.length === actual.length && timingSafeEqual(actual, expected);
   }
 
   function findEntry(store: Store, id: string): Entry {
@@ -411,6 +440,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     const browser = browserSession(req);
     const access = siteAuthed(req);
     const account = configured && access && browser?.userId ? accounts.get(browser.userId) : null;
+    const store = demo?.store ?? account?.store ?? null;
     res.json({
       passwordProtected: !!password,
       siteAuthed: access,
@@ -424,6 +454,8 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       linked: !!account?.storage,
       telegram: account?.telegram ?? null,
       maxUploadBytes: maxUpload,
+      vaultConfigured: !!store?.getSetting('vault_pin'),
+      vaultUnlocked: vaultUnlocked(req),
     });
   });
 
@@ -443,7 +475,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
 
   app.post('/api/auth/logout', (req, res) => {
     const browser = browserSession(req);
-    if (browser) { sessions.revoke(browser.id); pending.delete(browser.id); }
+    if (browser) { unlockedVaults.delete(browser.id); sessions.revoke(browser.id); pending.delete(browser.id); }
     res.clearCookie(COOKIE, cookieOptions);
     res.json({ ok: true });
   });
@@ -554,23 +586,56 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     next();
   });
 
+  app.post('/api/vault/setup', wrap(async (req, res) => {
+    const store = vaultStore(req);
+    if (!store) throw new HttpError(401, 'Sign in before setting up the Secret Vault.');
+    const { pin } = vaultPinSchema.parse(req.body ?? {});
+    if (store.getSetting('vault_pin')) throw new HttpError(409, 'The Secret Vault is already set up. Enter its PIN to unlock it.');
+    store.setSetting('vault_pin', vaultHash(pin));
+    const browser = browserSession(req) ?? issueSession(req, res, null);
+    if (browser) unlockedVaults.add(browser.id);
+    res.json({ ok: true, vaultConfigured: true, vaultUnlocked: true });
+  }));
+
+  app.post('/api/vault/unlock', wrap(async (req, res) => {
+    const store = vaultStore(req);
+    if (!store) throw new HttpError(401, 'Sign in before opening the Secret Vault.');
+    const { pin } = vaultPinSchema.parse(req.body ?? {});
+    const stored = store.getSetting('vault_pin');
+    if (!stored) throw new HttpError(404, 'Set up the Secret Vault first.');
+    if (!verifyVaultPin(pin, stored)) throw new HttpError(401, 'That vault PIN is incorrect.');
+    const browser = browserSession(req) ?? issueSession(req, res, null);
+    if (browser) unlockedVaults.add(browser.id);
+    res.json({ ok: true, vaultConfigured: true, vaultUnlocked: true });
+  }));
+
+  app.post('/api/vault/lock', wrap(async (req, res) => {
+    const browser = browserSession(req);
+    if (browser) unlockedVaults.delete(browser.id);
+    res.json({ ok: true, vaultUnlocked: false });
+  }));
+
   // --- Entries -------------------------------------------------------------
   app.get('/api/entries', (req, res) => {
     const { store } = workspace(req);
-    res.json({ entries: store.all().map((e) => store.publicEntry(e)) });
+    res.json({ entries: store.all().filter((e) => !e.vault || vaultUnlocked(req)).map((e) => store.publicEntry(e)) });
   });
 
   app.post('/api/folders', wrap(async (req, res) => {
     const { store } = workspace(req);
     // Folders are purely a database concept, so nesting is unrestricted and
     // creating one never touches Telegram.
-    const input = folderSchema.parse(req.body ?? {});
+    const input = folderSchema.extend({ vault: z.boolean().optional() }).parse(req.body ?? {});
     const parent = findFolder(store, input.parentId ?? null);
+    const vault = input.vault ?? !!parent?.vault;
+    if (parent && vault !== !!parent.vault) throw new HttpError(400, 'Vault folders can only contain vault items.');
+    if (vault && !vaultUnlocked(req)) throw new HttpError(423, 'Unlock the Secret Vault first.');
     const entry = store.insert({
       name: input.name,
       kind: 'folder',
       color: input.color ?? 'purple',
       parent_id: parent?.id ?? null,
+      vault: vault ? 1 : 0,
     });
     res.status(201).json({ entry: store.publicEntry(entry) });
   }));
@@ -581,6 +646,9 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     if (!file) throw new HttpError(400, 'Choose a file to upload.');
     try {
       const parent = findFolder(store, req.body.parentId || null);
+      const vault = req.body.vault === 'true' || !!parent?.vault;
+      if (parent && vault !== !!parent.vault) throw new HttpError(400, 'Vault folders can only contain vault items.');
+      if (vault && !vaultUnlocked(req)) throw new HttpError(423, 'Unlock the Secret Vault first.');
       const name = cleanName(file.originalname);
       const mime = file.mimetype || 'application/octet-stream';
 
@@ -589,7 +657,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
         const sent = await client.upload(file.path, name, file.size, mime);
         const entry = store.insert({
           name, kind: 'file', mime, size: sent.size,
-          parent_id: parent?.id ?? null, message_id: sent.messageId,
+          parent_id: parent?.id ?? null, message_id: sent.messageId, vault: vault ? 1 : 0,
         });
         res.status(201).json({ entry: store.publicEntry(entry) });
       } else {
@@ -597,7 +665,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
         await store.saveFile(id, createReadStream(file.path));
         const entry = store.insert({
           id, name, kind: 'file', mime, size: file.size,
-          parent_id: parent?.id ?? null, local_path: id,
+          parent_id: parent?.id ?? null, local_path: id, vault: vault ? 1 : 0,
         });
         res.status(201).json({ entry: store.publicEntry(entry) });
       }
@@ -609,6 +677,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   app.patch('/api/entries/:id', wrap(async (req, res) => {
     const { store, storage } = workspace(req);
     const entry = findEntry(store, pathId(req));
+    requireVault(req, entry);
     if (entry.deleted_at) throw new HttpError(400, 'This item is in the trash. Restore it first.');
     const input = patchSchema.parse(req.body ?? {});
 
@@ -643,6 +712,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     const current = workspace(req);
     const { store } = current;
     const entry = findEntry(store, pathId(req));
+    requireVault(req, entry);
     const permanent = req.query.permanent === '1';
     if (permanent) {
       await hardDelete(current, entry);
@@ -661,6 +731,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   app.post('/api/entries/:id/restore', wrap(async (req, res) => {
     const { store } = workspace(req);
     const entry = findEntry(store, pathId(req));
+    requireVault(req, entry);
     if (entry.deleted_at) {
       store.update(entry.id, { deleted_at: null, trash_root: null });
       if (entry.kind === 'folder') {
@@ -680,6 +751,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
 
   app.get(['/api/files/:id/download', '/api/files/:id/raw'], wrap(async (req, res) => {
     const entry = findEntry(workspace(req).store, pathId(req));
+    requireVault(req, entry);
     if (entry.kind !== 'file') throw new HttpError(400, 'Only files can be downloaded.');
     if (entry.deleted_at) throw new HttpError(400, 'This file is in the trash. Restore it to open it.');
     const inline = req.path.endsWith('/raw');

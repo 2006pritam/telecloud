@@ -11,6 +11,7 @@ export type Entry = {
   updated_at: string;
   deleted_at: string | null;
   trash_root: string | null;
+  vault: boolean;
 };
 
 export type Status = {
@@ -27,6 +28,8 @@ export type Status = {
   linked: boolean;
   telegram: { account: string; channel: string } | null;
   maxUploadBytes: number;
+  vaultConfigured: boolean;
+  vaultUnlocked: boolean;
 };
 
 export type UploadItem = {

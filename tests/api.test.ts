@@ -67,6 +67,29 @@ describe('demo mode CRUD', () => {
     assert.equal(typeof data.maxUploadBytes, 'number');
   });
 
+  test('secret vault hides private files while locked and reopens with its PIN', async () => {
+    const setup = await call('POST', '/api/vault/setup', { pin: '123456' });
+    assert.equal(setup.status, 200);
+    const form = new FormData();
+    form.append('file', new Blob(['private telecloud'], { type: 'text/plain' }), 'private.txt');
+    form.append('vault', 'true');
+    const uploadResponse = await call('POST', '/api/files', form);
+    const uploaded = await json(uploadResponse);
+    assert.equal(uploadResponse.status, 201, String(uploaded.error ?? 'Vault upload failed.'));
+    const privateEntry = uploaded.entry as { id: string; vault: boolean };
+    assert.equal(privateEntry.vault, true);
+
+    assert.equal((await call('POST', '/api/vault/lock')).status, 200);
+    const lockedEntries = (await json(await call('GET', '/api/entries'))).entries as { id: string }[];
+    assert.equal(lockedEntries.some((entry) => entry.id === privateEntry.id), false);
+    assert.equal((await call('GET', `/api/files/${privateEntry.id}/download`)).status, 423);
+
+    assert.equal((await call('POST', '/api/vault/unlock', { pin: '123456' })).status, 200);
+    const openEntries = (await json(await call('GET', '/api/entries'))).entries as { id: string }[];
+    assert.equal(openEntries.some((entry) => entry.id === privateEntry.id), true);
+    assert.equal(await (await call('GET', `/api/files/${privateEntry.id}/download`)).text(), 'private telecloud');
+  });
+
   test('refuses to link Telegram when unconfigured', async () => {
     const res = await call('POST', '/api/telegram/send-code', { phone: '+15551234567' });
     assert.equal(res.status, 400);

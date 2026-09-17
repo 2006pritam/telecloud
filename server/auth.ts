@@ -12,6 +12,8 @@ export type BrowserSession = {
   expiresAt: number;
 };
 
+export type VaultSession = BrowserSession & { vaultUnlocked?: boolean };
+
 /** Opaque, revocable browser sessions. Telegram credentials never enter a cookie. */
 export class BrowserSessions {
   private db: DatabaseSync;

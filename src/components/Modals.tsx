@@ -7,6 +7,7 @@ import {
   FolderInput,
   Home,
   Loader2,
+  LockKeyhole,
   Palette,
   Pencil,
   X,
@@ -395,6 +396,44 @@ export function PreviewModal({ entry, onClose }: { entry: Entry; onClose: () => 
           <Download size={15} />
           Download
         </a>
+      </div>
+    </Modal>
+  );
+}
+
+export function VaultModal({
+  setup,
+  onSubmit,
+  onClose,
+}: {
+  setup: boolean;
+  onSubmit: (pin: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [pin, setPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async () => {
+    if (busy || !/^\d{6}$/.test(pin)) return;
+    setBusy(true);
+    setError('');
+    try { await onSubmit(pin); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not open the vault.'); setBusy(false); }
+  };
+  return (
+    <Modal title={setup ? 'Set up Secret Vault' : 'Unlock Secret Vault'} icon={<LockKeyhole size={17} />} onClose={onClose}>
+      <p className="confirm-message">{setup ? 'Choose a six-digit PIN. The vault protects its files separately from your normal drive.' : 'Enter your six-digit PIN to reveal your private files.'}</p>
+      <label className="field">
+        <LockKeyhole size={15} />
+        <input value={pin} type="password" inputMode="numeric" maxLength={6} autoFocus placeholder="6-digit PIN" aria-label="Vault PIN" onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && void submit()} />
+      </label>
+      {error && <div className="form-error">{error}</div>}
+      <div className="modal-actions">
+        <button className="btn ghost" onClick={onClose}>Cancel</button>
+        <button className="btn primary" onClick={() => void submit()} disabled={busy || pin.length !== 6}>
+          {busy && <Loader2 size={15} className="spin" />}
+          {setup ? 'Create vault' : 'Unlock vault'}
+        </button>
       </div>
     </Modal>
   );

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 export type Entry = {
   id: string; name: string; kind: 'file' | 'folder'; parent_id: string | null;
   mime: string; size: number; color: string; starred: number;
+  vault: number;
   message_id: number | null; local_path: string | null;
   created_at: string; updated_at: string; deleted_at: string | null; trash_root: string | null;
 };
@@ -22,17 +23,19 @@ export class Store {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL, parent_id TEXT,
       mime TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
       color TEXT NOT NULL DEFAULT 'purple', starred INTEGER NOT NULL DEFAULT 0,
+      vault INTEGER NOT NULL DEFAULT 0,
       message_id INTEGER, local_path TEXT,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, trash_root TEXT
     ); CREATE INDEX IF NOT EXISTS entries_parent ON entries(parent_id);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    try { this.db.exec('ALTER TABLE entries ADD COLUMN vault INTEGER NOT NULL DEFAULT 0'); } catch { /* existing schema already migrated */ }
   }
   close() { this.db.close(); }
   all(): Entry[] { return this.db.prepare('SELECT * FROM entries ORDER BY created_at DESC').all() as unknown as Entry[]; }
   get(id: string): Entry | undefined { return this.db.prepare('SELECT * FROM entries WHERE id=?').get(id) as Entry | undefined; }
   insert(input: Partial<Entry> & Pick<Entry, 'name' | 'kind'>): Entry {
     const now = new Date().toISOString();
-    const entry: Entry = { id: randomUUID(), parent_id: null, mime: '', size: 0, color: 'purple', starred: 0,
+    const entry: Entry = { id: randomUUID(), parent_id: null, mime: '', size: 0, color: 'purple', starred: 0, vault: 0,
       message_id: null, local_path: null, created_at: now,
       updated_at: now, deleted_at: null, trash_root: null, ...input };
     const keys = Object.keys(entry);
@@ -79,7 +82,16 @@ export class Store {
   }
   publicEntry(e: Entry) {
     const { message_id: _message, local_path: _local, ...safe } = e;
-    return { ...safe, starred: !!e.starred };
+    return { ...safe, starred: !!e.starred, vault: !!e.vault };
+  }
+
+  getSetting(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM settings WHERE key=?').get(key) as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  setSetting(key: string, value: string) {
+    this.db.prepare('INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value);
   }
 
   /**

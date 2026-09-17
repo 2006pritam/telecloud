@@ -1,8 +1,8 @@
-import { Cloud, FolderClosed, HardDrive, LogOut, Moon, Star, Sun, Trash2 } from 'lucide-react';
+import { Cloud, FolderClosed, HardDrive, LockKeyhole, LogOut, ShieldCheck, Moon, Star, Sun, Trash2, UnlockKeyhole } from 'lucide-react';
 import type { Entry, Status } from '../types';
 import { formatBytes, pluralize } from '../util';
 
-export type View = { type: 'folder'; id: string | null } | { type: 'starred' } | { type: 'trash' };
+export type View = { type: 'folder'; id: string | null } | { type: 'starred' } | { type: 'trash' } | { type: 'vault' };
 
 type SidebarProps = {
   status: Status;
@@ -13,9 +13,10 @@ type SidebarProps = {
   onNavigate: (view: View) => void;
   onLogout: () => void;
   onUnlink: () => void;
+  onVault: () => void;
 };
 
-export default function Sidebar({ status, entries, view, theme, onToggleTheme, onNavigate, onLogout, onUnlink }: SidebarProps) {
+export default function Sidebar({ status, entries, view, theme, onToggleTheme, onNavigate, onLogout, onUnlink, onVault }: SidebarProps) {
   const files = entries.filter((e) => !e.deleted_at && e.kind === 'file');
   const usedBytes = files.reduce((sum, f) => sum + f.size, 0);
   const isFolderView = view.type === 'folder';
@@ -51,6 +52,11 @@ export default function Sidebar({ status, entries, view, theme, onToggleTheme, o
         <button className={navItem(view.type === 'trash')} onClick={() => onNavigate({ type: 'trash' })}>
           <Trash2 size={18} />
           <span>Trash</span>
+        </button>
+        <button className={navItem(view.type === 'vault')} onClick={onVault}>
+          {status.vaultUnlocked ? <UnlockKeyhole size={18} /> : <LockKeyhole size={18} />}
+          <span>Secret Vault</span>
+          <span className="nav-badge">{status.vaultUnlocked ? 'Open' : status.vaultConfigured ? 'Locked' : 'Set up'}</span>
         </button>
       </nav>
 
@@ -88,6 +94,13 @@ export default function Sidebar({ status, entries, view, theme, onToggleTheme, o
             {pluralize(files.length, 'file')} · {formatBytes(usedBytes)}
           </span>
         </div>
+
+        {status.vaultUnlocked && (
+          <button className="btn ghost block" onClick={onVault}>
+            <ShieldCheck size={15} />
+            Lock vault
+          </button>
+        )}
 
         {(status.passwordProtected || status.linked) && (
           <button className="btn ghost block" onClick={onLogout}>
