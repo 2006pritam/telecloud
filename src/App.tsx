@@ -642,6 +642,7 @@ export default function App() {
       {renderModal()}
       <UploadPanel uploads={uploads} onDismiss={(id) => setUploads((current) => current.filter((u) => u.id !== id))} />
       <Toasts toasts={toasts} />
+      <footer className="app-footer">© 2026 All rights reserved by Pritam Kumar Modak</footer>
     </div>
   );
 }
