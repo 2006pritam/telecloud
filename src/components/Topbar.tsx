@@ -1,4 +1,4 @@
-import { ChevronRight, FolderPlus, Search, Trash2, Upload, X } from 'lucide-react';
+import { ChevronRight, FolderPlus, Moon, Search, Sun, Trash2, Upload, X } from 'lucide-react';
 import type { Entry } from '../types';
 
 export type SortKey = 'name' | 'date' | 'size';
@@ -18,6 +18,8 @@ type TopbarProps = {
   onNewFolder: () => void;
   onEmptyTrash: () => void;
   onNavigate: (folderId: string | null) => void;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
 };
 
 export default function Topbar({
@@ -35,6 +37,8 @@ export default function Topbar({
   onNewFolder,
   onEmptyTrash,
   onNavigate,
+  theme,
+  onToggleTheme,
 }: TopbarProps) {
   return (
     <header className="topbar">
@@ -63,6 +67,11 @@ export default function Topbar({
       </div>
 
       <div className="topbar-actions">
+        <button className="theme-toggle" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+          {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
+        </button>
+
         <label className="search">
           <Search size={15} />
           <input

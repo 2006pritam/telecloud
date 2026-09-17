@@ -44,6 +44,11 @@ type ModalState =
   | null;
 
 export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = window.localStorage.getItem('telecloud-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [status, setStatus] = useState<Status | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [view, setView] = useState<View>({ type: 'folder', id: null });
@@ -105,6 +110,11 @@ export default function App() {
       if (epoch === sessionEpoch.current) setLoading(false);
     }
   }, [resetWorkspace]);
+
+  useEffect(() => {
+    document.body.dataset.theme = theme;
+    window.localStorage.setItem('telecloud-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     void boot();
@@ -456,6 +466,8 @@ export default function App() {
         status={status}
         entries={entries}
         view={view}
+        theme={theme}
+        onToggleTheme={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
         onNavigate={(next) => {
           setQuery('');
           setView(next);
@@ -531,6 +543,8 @@ export default function App() {
             })
           }
           onNavigate={openFolder}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
         />
 
         {visible.length > 0 && (

@@ -1,4 +1,4 @@
-import { Cloud, FolderClosed, HardDrive, LogOut, Star, Trash2 } from 'lucide-react';
+import { Cloud, FolderClosed, HardDrive, LogOut, Moon, Star, Sun, Trash2 } from 'lucide-react';
 import type { Entry, Status } from '../types';
 import { formatBytes, pluralize } from '../util';
 
@@ -8,12 +8,14 @@ type SidebarProps = {
   status: Status;
   entries: Entry[];
   view: View;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
   onNavigate: (view: View) => void;
   onLogout: () => void;
   onUnlink: () => void;
 };
 
-export default function Sidebar({ status, entries, view, onNavigate, onLogout, onUnlink }: SidebarProps) {
+export default function Sidebar({ status, entries, view, theme, onToggleTheme, onNavigate, onLogout, onUnlink }: SidebarProps) {
   const files = entries.filter((e) => !e.deleted_at && e.kind === 'file');
   const usedBytes = files.reduce((sum, f) => sum + f.size, 0);
   const isFolderView = view.type === 'folder';
@@ -31,6 +33,11 @@ export default function Sidebar({ status, entries, view, onNavigate, onLogout, o
           <span className="brand-tag">A little space for everything</span>
         </div>
       </div>
+
+      <button className="theme-toggle sidebar-theme-toggle" onClick={onToggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+        {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+        <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+      </button>
 
       <nav className="nav">
         <button className={navItem(isFolderView)} onClick={() => onNavigate({ type: 'folder', id: null })}>

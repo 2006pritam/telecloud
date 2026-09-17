@@ -19,6 +19,23 @@
   --font-display: 'Manrope', 'DM Sans', system-ui, sans-serif;
 }
 
+body[data-theme='dark'] {
+  --bg: #0b1020;
+  --ink: #edf1ff;
+  --muted: #a8b0cc;
+  --faint: #7883a8;
+  --line: #1c2844;
+  --card: #111a2d;
+  --lavender: #9c8df7;
+  --lavender-deep: #c6bafc;
+  --lavender-soft: rgba(156, 141, 247, 0.15);
+  --danger: #ff8c7a;
+  --danger-soft: rgba(255, 140, 122, 0.12);
+  --ok: #56d190;
+  --shadow: 0 1px 2px rgba(3, 7, 18, 0.45), 0 12px 28px rgba(3, 7, 18, 0.7);
+  --shadow-soft: 0 1px 2px rgba(3, 7, 18, 0.4), 0 8px 20px rgba(3, 7, 18, 0.5);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -39,6 +56,14 @@ body {
     var(--bg);
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+body[data-theme='dark'] {
+  background:
+    radial-gradient(900px 500px at 85% -10%, rgba(156, 141, 247, 0.15), transparent 60%),
+    radial-gradient(700px 420px at -10% 110%, rgba(62, 142, 222, 0.1), transparent 55%),
+    var(--bg);
 }
 
 button {
@@ -166,7 +191,7 @@ select {
 }
 
 .nav-item:hover {
-  background: #f4f2fa;
+  background: rgba(120, 96, 221, 0.08);
   color: var(--ink);
 }
 
@@ -304,7 +329,7 @@ select {
 }
 
 .crumb:hover {
-  background: #f1eff8;
+  background: rgba(120, 96, 221, 0.08);
   color: var(--ink);
 }
 
@@ -372,7 +397,7 @@ select {
 
 .search .clear:hover {
   color: var(--ink);
-  background: #f1eff8;
+  background: rgba(120, 96, 221, 0.08);
 }
 
 .sort {
@@ -384,6 +409,30 @@ select {
   box-shadow: var(--shadow-soft);
   color: var(--muted);
   cursor: pointer;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+
+.theme-toggle:hover {
+  border-color: #b9a8ef;
+}
+
+.sidebar-theme-toggle {
+  width: 100%;
+  margin-bottom: 8px;
 }
 
 /* ---------- buttons ---------- */
@@ -431,7 +480,7 @@ select {
 
 .btn.ghost:hover:not(:disabled) {
   border-color: #d4cdef;
-  background: #fbfaff;
+  background: rgba(120, 96, 221, 0.05);
 }
 
 .btn.danger {
@@ -584,6 +633,11 @@ select {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(3px);
   box-shadow: 0 1px 4px rgba(40, 38, 52, 0.12);
+}
+
+body[data-theme='dark'] .card-actions .icon-btn {
+  background: rgba(17, 26, 45, 0.8);
+  box-shadow: 0 1px 4px rgba(3, 7, 18, 0.4);
 }
 
 /* ---------- context menu ---------- */
