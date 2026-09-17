@@ -640,6 +640,88 @@ body[data-theme='dark'] .card-actions .icon-btn {
   box-shadow: 0 1px 4px rgba(3, 7, 18, 0.4);
 }
 
+body[data-theme='dark'] .mode-card,
+body[data-theme='dark'] .field,
+body[data-theme='dark'] .preview-body,
+body[data-theme='dark'] .upload-item,
+body[data-theme='dark'] .toast,
+body[data-theme='dark'] .login-card,
+body[data-theme='dark'] .modal,
+body[data-theme='dark'] .context-menu,
+body[data-theme='dark'] .sidebar,
+body[data-theme='dark'] .drop-card {
+  background: #111a2d;
+}
+
+body[data-theme='dark'] .mode-card {
+  background: #101827;
+}
+
+body[data-theme='dark'] .field {
+  background: #0f172a;
+}
+
+body[data-theme='dark'] .preview-body {
+  background: #0f172a;
+}
+
+body[data-theme='dark'] .search input::placeholder,
+body[data-theme='dark'] .crumb-step,
+body[data-theme='dark'] .mode-sub,
+body[data-theme='dark'] .mode-hint,
+body[data-theme='dark'] .dim,
+body[data-theme='dark'] .upload-sub,
+body[data-theme='dark'] .preview-meta,
+body[data-theme='dark'] .login-card p,
+body[data-theme='dark'] .login-note,
+body[data-theme='dark'] .confirm-message,
+body[data-theme='dark'] .move-empty,
+body[data-theme='dark'] .preview-fallback,
+body[data-theme='dark'] .empty p,
+body[data-theme='dark'] .empty h3,
+body[data-theme='dark'] .brand-tag,
+body[data-theme='dark'] .mode-action,
+body[data-theme='dark'] .storage-card,
+body[data-theme='dark'] .list-meta,
+body[data-theme='dark'] .card-meta {
+  color: #d7def5;
+}
+
+body[data-theme='dark'] .search input::placeholder {
+  color: #93a0c5;
+}
+
+body[data-theme='dark'] .menu-item:hover,
+body[data-theme='dark'] .move-row:hover {
+  background: rgba(156, 141, 247, 0.12);
+}
+
+body[data-theme='dark'] .icon-btn:hover,
+body[data-theme='dark'] .search .clear:hover,
+body[data-theme='dark'] .crumb:hover,
+body[data-theme='dark'] .nav-item:hover {
+  background: rgba(156, 141, 247, 0.12);
+}
+
+body[data-theme='dark'] .upload-bar {
+  background: #1e2d46;
+}
+
+body[data-theme='dark'] .toast {
+  background: #1a2438;
+  color: #edf1ff;
+}
+
+body[data-theme='dark'] .toast.success {
+  background: #183127;
+  color: #d9f7ec;
+}
+
+body[data-theme='dark'] .toast.error {
+  background: #3d211d;
+  color: #ffd8d0;
+}
+
 /* ---------- context menu ---------- */
 
 .context-menu {
