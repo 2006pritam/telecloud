@@ -63,6 +63,7 @@ export default function App() {
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const uploadChain = useRef(Promise.resolve());
   const sessionEpoch = useRef(0);
   const uploadAborts = useRef(new Map<string, () => void>());
@@ -79,6 +80,7 @@ export default function App() {
     setModal(null);
     setMenu(null);
     setDragging(false);
+    dragDepth.current = 0;
   }, []);
 
   const toast = useCallback((message: string, kind: Toast['kind'] = 'info') => {
@@ -465,6 +467,7 @@ export default function App() {
   const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : view.type === 'vault' ? 'Secret Vault' : 'My Files';
   const showUpload = !searching && view.type !== 'trash' && (view.type !== 'vault' || status.vaultUnlocked);
   const showNewFolder = !searching && (view.type === 'folder' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
+  const canDropFiles = showUpload;
 
   return (
     <div className="shell">
@@ -513,19 +516,29 @@ export default function App() {
 
       <main
         className="main"
+        onDragEnter={(e) => {
+          if (!canDropFiles || !Array.from(e.dataTransfer.types).includes('Files')) return;
+          e.preventDefault();
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
         onDragOver={(e) => {
-          if (Array.from(e.dataTransfer.types).includes('Files')) {
+          if (canDropFiles && Array.from(e.dataTransfer.types).includes('Files')) {
             e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
             setDragging(true);
           }
         }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+        onDragLeave={() => {
+          if (!canDropFiles) return;
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
         }}
         onDrop={(e) => {
           e.preventDefault();
+          dragDepth.current = 0;
           setDragging(false);
-          if (e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
+          if (canDropFiles && e.dataTransfer.files.length > 0) uploadFiles(e.dataTransfer.files);
         }}
       >
         <Topbar
@@ -555,6 +568,8 @@ export default function App() {
           }
           onNavigate={openFolder}
         />
+
+        {canDropFiles && <div className="drop-hint"><Upload size={14} /> Drop files anywhere here to upload</div>}
 
         {visible.length > 0 && (
           <div className="list-meta">

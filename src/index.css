@@ -841,6 +841,17 @@ body[data-theme='dark'] .toast.error {
 
 /* ---------- drop overlay ---------- */
 
+.drop-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-end;
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .drop-overlay {
   position: absolute;
   inset: 0;
@@ -851,6 +862,7 @@ body[data-theme='dark'] .toast.error {
   border: 2px dashed #b9a8ef;
   display: grid;
   place-items: center;
+  pointer-events: none;
 }
 
 .drop-card {
