@@ -1,6 +1,6 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createHmac } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -197,6 +197,37 @@ describe('demo mode CRUD', () => {
     assert.equal(res.status, 404);
     assert.ok((await json(res)).error);
   });
+});
+
+// Windows Storage Sense and the other OS temp sweepers delete the staging
+// folder under a long-running server. Creating it once at startup left every
+// later upload failing with a raw ENOENT for a temp path nobody chose.
+test('uploads survive the staging folder being swept away', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'telecloud-staging-'));
+  const staging = path.join(dir, 'staging');
+  const info = await createApp({ dataDir: dir, password: '', apiId: 0, apiHash: '', uploadDir: staging });
+  const instance = info.app.listen(0, '127.0.0.1');
+  try {
+    await once(instance, 'listening');
+    const address = instance.address();
+    assert.ok(address && typeof address === 'object');
+    assert.ok(existsSync(staging));
+
+    rmSync(staging, { recursive: true, force: true });
+    assert.equal(existsSync(staging), false);
+
+    const form = new FormData();
+    form.append('file', new Blob(['swept'], { type: 'text/plain' }), 'swept.txt');
+    const res = await fetch(`http://127.0.0.1:${address.port}/api/files`, { method: 'POST', body: form });
+    assert.equal(res.status, 201);
+    const entry = ((await res.json()) as { entry: Record<string, unknown> }).entry;
+    assert.equal(entry.name, 'swept.txt');
+    assert.equal(entry.size, 5);
+  } finally {
+    await new Promise<void>((resolve) => instance.close(() => resolve()));
+    await info.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe('password protection', () => {

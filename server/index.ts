@@ -18,6 +18,9 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3001);
 const DATA_DIR = process.env.DATA_DIR || './data';
+// Containers give /tmp a small ephemeral layer, which a 2 GB upload can fill.
+// Point this at the same volume as DATA_DIR when deploying.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '';
 const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const API_ID = process.env.TELEGRAM_API_ID?.trim() || '';
@@ -114,6 +117,8 @@ export type AppOptions = {
   telegramBackend?: TelegramBackend;
   secureCookies?: boolean;
   trustProxy?: number;
+  /** Where in-flight uploads are staged. Defaults to a folder in the OS temp directory. */
+  uploadDir?: string;
 };
 
 export type AppInfo = {
@@ -148,10 +153,31 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
 
   // Uploads stream to a temp file rather than memory: a 2 GB buffer would
   // exhaust the heap, and GramJS uploads from a path anyway.
-  const tmpDir = path.join(os.tmpdir(), 'telecloud-uploads');
-  mkdirSync(tmpDir, { recursive: true });
+  const tmpDir = options.uploadDir ?? (UPLOAD_DIR || path.join(os.tmpdir(), 'telecloud-uploads'));
+  // Remade for every upload rather than once at startup. Windows Storage Sense
+  // and the other OS temp sweepers delete this folder out from under a
+  // long-running server, and multer then fails each upload with a raw ENOENT
+  // naming a temp path the person never chose — which reads as a broken file
+  // rather than a missing directory the server can simply recreate.
+  const stagingDir = (): string => {
+    mkdirSync(tmpDir, { recursive: true });
+    return tmpDir;
+  };
+  stagingDir();
   const maxUpload = configured ? MAX_FILE_BYTES : DEMO_MAX_BYTES;
-  const upload = multer({ dest: tmpDir, limits: { fileSize: maxUpload, files: 1 } });
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, done) => {
+        try {
+          done(null, stagingDir());
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          done(new HttpError(500, `The server could not prepare a staging folder for uploads: ${reason}`), '');
+        }
+      },
+    }),
+    limits: { fileSize: maxUpload, files: 1 },
+  });
   const discard = (file?: Express.Multer.File) => {
     if (file?.path && existsSync(file.path)) {
       try { unlinkSync(file.path); } catch { /* the OS will reap the temp file */ }
