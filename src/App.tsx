@@ -543,8 +543,6 @@ export default function App() {
             })
           }
           onNavigate={openFolder}
-          theme={theme}
-          onToggleTheme={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
         />
 
         {visible.length > 0 && (
