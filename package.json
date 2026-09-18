@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "concurrently -k -n api,web -c magenta,cyan \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\"",
     "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
@@ -13,6 +15,7 @@
     "check": "tsc -b && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "big-integer": "^1.6.52",
     "clsx": "^2.1.1",
     "dotenv": "^16.5.0",

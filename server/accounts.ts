@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Store } from './store.js';
 import { TelegramStorage, sendCode, signIn, checkPassword, type Session } from './telegram.js';
+import { NeonMetadata } from './neon.js';
 
 export type StorageClient = Pick<TelegramStorage, 'verify' | 'upload' | 'download' | 'renameFile' | 'deleteFile' | 'close'>;
 export type TelegramBackend = {
@@ -20,6 +21,7 @@ export type Workspace = {
   store: Store;
   storage: StorageClient | null;
   telegram: { account: string; channel: string } | null;
+  persist?: () => Promise<void>;
 };
 
 /** An account owns its database and connection, independently of browser sessions. */
@@ -27,7 +29,7 @@ export class Accounts {
   private accounts = new Map<string, Workspace>();
   private legacyUser: string | null = null;
 
-  constructor(private dataDir: string, private apiId: number, private apiHash: string, private backend: TelegramBackend) {
+  constructor(private dataDir: string, private apiId: number, private apiHash: string, private backend: TelegramBackend, private neon?: NeonMetadata) {
     // Keep existing installations intact. Only the verified original owner can
     // open the old database; every other account gets its own directory.
     if (existsSync(path.join(dataDir, 'telegram', 'telecloud.sqlite'))) {
@@ -53,6 +55,7 @@ export class Accounts {
       storage: valid ? this.backend.createStorage(this.apiId, this.apiHash, saved) : null,
       telegram: valid ? { account: saved.name, channel: 'Telecloud Storage' } : null,
     };
+    account.persist = this.neon ? () => this.neon!.save(`account:${userId}`, store) : undefined;
     this.accounts.set(userId, account);
     return account;
   }
@@ -62,8 +65,10 @@ export class Accounts {
     try {
       const info = await next.verify();
       const account = this.get(session.userId);
+      if (this.neon) await this.neon.restore(`account:${session.userId}`, account.store);
       account.store.bindChannel(session.channelId);
       account.store.saveSession(session);
+      await account.persist?.();
       const previous = account.storage;
       account.storage = next;
       account.telegram = info;

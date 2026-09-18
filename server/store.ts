@@ -12,6 +12,11 @@ export type Entry = {
   created_at: string; updated_at: string; deleted_at: string | null; trash_root: string | null;
 };
 
+export type StoreSnapshot = {
+  entries: Entry[];
+  settings: Record<string, string>;
+};
+
 export class Store {
   db: DatabaseSync;
   dir: string;
@@ -92,6 +97,31 @@ export class Store {
 
   setSetting(key: string, value: string) {
     this.db.prepare('INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value);
+  }
+
+  snapshot(): StoreSnapshot {
+    const rows = this.db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
+    return { entries: this.all(), settings: Object.fromEntries(rows.map((row) => [row.key, row.value])) };
+  }
+
+  importSnapshot(snapshot: StoreSnapshot) {
+    try {
+      this.db.exec('BEGIN');
+      this.db.exec('DELETE FROM entries; DELETE FROM settings;');
+      const insertEntry = this.db.prepare(`INSERT INTO entries
+        (id,name,kind,parent_id,mime,size,color,starred,vault,message_id,local_path,created_at,updated_at,deleted_at,trash_root)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+      for (const entry of snapshot.entries) {
+        insertEntry.run(entry.id, entry.name, entry.kind, entry.parent_id, entry.mime, entry.size, entry.color, entry.starred ? 1 : 0,
+          entry.vault ? 1 : 0, entry.message_id, entry.local_path, entry.created_at, entry.updated_at, entry.deleted_at, entry.trash_root);
+      }
+      const setSetting = this.db.prepare('INSERT INTO settings(key,value) VALUES (?,?)');
+      for (const [key, value] of Object.entries(snapshot.settings)) setSetting.run(key, value);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   /**

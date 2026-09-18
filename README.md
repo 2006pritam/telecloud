@@ -101,6 +101,8 @@ For a real deployment, use HTTPS (Caddy, nginx, or a tunnel) and `COOKIE_SECURE=
 
 ## Data & backups
 
+- Set `DATABASE_URL` to the Neon PostgreSQL connection string in Render. Telecloud mirrors each account's folders, entry metadata, vault settings, and Telegram session/channel metadata there, so a Render restart can rebuild the local cache. The actual file bytes remain in Telegram.
+
 - `data/users/<telegram-user-id>/telegram/` holds each account's metadata database and Telegram session. `data/sessions.sqlite` holds hashed browser sessions. `data/demo/` holds the separate shared demo database and file blobs.
 - In Telegram mode the files themselves live in your Telegram account: yours, portable, and reachable from any Telegram client.
 - One `DATA_DIR` supports multiple Telegram accounts. Users sharing an account see the same file tree; different Telegram accounts have separate databases and connections.

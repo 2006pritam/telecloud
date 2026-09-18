@@ -13,6 +13,7 @@ import { Store, type Entry } from './store.js';
 import { TelegramAuthError, MAX_FILE_BYTES } from './telegram.js';
 import { Accounts, telegramBackend, type TelegramBackend, type Workspace, type StorageClient } from './accounts.js';
 import { BrowserSessions, SESSION_TTL, type BrowserSession } from './auth.js';
+import { NeonMetadata } from './neon.js';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = process.env.HOST || '127.0.0.1';
@@ -141,16 +142,25 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   const setup = inspectTelegram(options.apiId ?? API_ID, options.apiHash ?? API_HASH);
   const { apiId, apiHash, configured } = setup;
   const mode: 'demo' | 'telegram' = configured ? 'telegram' : 'demo';
+  const neon = process.env.DATABASE_URL ? new NeonMetadata(process.env.DATABASE_URL) : undefined;
   const sessions = new BrowserSessions(dataDir, secret);
-  const accounts = new Accounts(dataDir, apiId, apiHash, backend);
+  const accounts = new Accounts(dataDir, apiId, apiHash, backend, neon);
   const demo: Workspace | null = configured ? null : { store: new Store(dataDir, 'demo'), storage: null, telegram: null };
   demo?.store.seed();
+  if (demo && neon) {
+    await neon.restore('demo', demo.store);
+    demo.persist = () => neon.save('demo', demo.store);
+  }
   const requestWorkspaces = new WeakMap<Request, Workspace>();
   const unlockedVaults = new Set<string>();
   function workspace(req: Request): Workspace {
     const current = requestWorkspaces.get(req);
     if (!current) throw new HttpError(401, 'Sign in with Telegram to continue.');
     return current;
+  }
+
+  async function storeWorkspace(req: Request) {
+    await workspace(req).persist?.();
   }
 
   // Uploads stream to a temp file rather than memory: a 2 GB buffer would
@@ -594,6 +604,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     store.setSetting('vault_pin', vaultHash(pin));
     const browser = browserSession(req) ?? issueSession(req, res, null);
     if (browser) unlockedVaults.add(browser.id);
+    await storeWorkspace(req);
     res.json({ ok: true, vaultConfigured: true, vaultUnlocked: true });
   }));
 
@@ -637,6 +648,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       parent_id: parent?.id ?? null,
       vault: vault ? 1 : 0,
     });
+    await storeWorkspace(req);
     res.status(201).json({ entry: store.publicEntry(entry) });
   }));
 
@@ -659,6 +671,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
           name, kind: 'file', mime, size: sent.size,
           parent_id: parent?.id ?? null, message_id: sent.messageId, vault: vault ? 1 : 0,
         });
+        await storeWorkspace(req);
         res.status(201).json({ entry: store.publicEntry(entry) });
       } else {
         const id = randomUUID();
@@ -667,6 +680,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
           id, name, kind: 'file', mime, size: file.size,
           parent_id: parent?.id ?? null, local_path: id, vault: vault ? 1 : 0,
         });
+        await storeWorkspace(req);
         res.status(201).json({ entry: store.publicEntry(entry) });
       }
     } finally {
@@ -705,6 +719,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       store.update(entry.id, { parent_id: target?.id ?? null });
     }
 
+    await storeWorkspace(req);
     res.json({ entry: store.publicEntry(store.get(entry.id)!) });
   }));
 
@@ -716,6 +731,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     const permanent = req.query.permanent === '1';
     if (permanent) {
       await hardDelete(current, entry);
+      await storeWorkspace(req);
       return res.json({ ok: true });
     }
     if (!entry.deleted_at) {
@@ -725,6 +741,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
         for (const d of store.descendants(entry.id)) store.update(d.id, { deleted_at: now, trash_root: entry.id });
       }
     }
+    await storeWorkspace(req);
     res.json({ ok: true });
   }));
 
@@ -738,6 +755,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
         for (const d of store.all()) if (d.trash_root === entry.id) store.update(d.id, { deleted_at: null, trash_root: null });
       }
     }
+    await storeWorkspace(req);
     res.json({ entry: store.publicEntry(store.get(entry.id)!) });
   }));
 
@@ -746,6 +764,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     const { store } = current;
     for (const entry of store.all().filter((e) => e.deleted_at && !e.trash_root)) await hardDelete(current, entry);
     for (const leftover of store.all().filter((e) => e.deleted_at)) store.remove(leftover.id);
+    await storeWorkspace(req);
     res.json({ ok: true });
   }));
 
