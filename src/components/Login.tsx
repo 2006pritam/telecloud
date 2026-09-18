@@ -46,6 +46,9 @@ export default function Login({ onDone }: { onDone: () => void }) {
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      <footer className="app-footer">
+        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
+      </footer>
     </div>
   );
 }

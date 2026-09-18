@@ -3,13 +3,29 @@ import { Loader2, Phone, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../api';
 import type { Status } from '../types';
 
+const STEPS = ['phone', 'code', 'password'] as const;
+type Step = (typeof STEPS)[number];
+
+function Steps({ current }: { current: Step }) {
+  const index = STEPS.indexOf(current);
+  return (
+    <ol className="steps" aria-label={`Step ${index + 1} of ${STEPS.length}`}>
+      {STEPS.map((step, i) => (
+        <li key={step} className={`step${i === index ? ' on' : ''}${i < index ? ' done' : ''}`}>
+          <span className="step-dot" />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * Three-step Telegram account link: phone → login code → optional 2FA password.
  * Each step posts to the server, which holds the half-finished auth key in
  * memory for this browser only; the Telegram session stays on the server.
  */
 export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status['telegram']) => void }) {
-  const [step, setStep] = useState<'phone' | 'code' | 'password'>('phone');
+  const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
@@ -77,6 +93,7 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
           </div>
           <h1>Sign in with Telegram</h1>
           <p>Your files are stored in your own Telegram account.</p>
+          <Steps current={step} />
           <label className="field">
             <Phone size={16} />
             <input
@@ -108,6 +125,7 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
           </div>
           <h1>Enter your code</h1>
           <p>Check Telegram on your other devices for the login code.</p>
+          <Steps current={step} />
           <label className="field">
             <input
               inputMode="numeric"
@@ -138,6 +156,7 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
           </div>
           <h1>Two-step verification</h1>
           <p>{hint ? `Password hint: ${hint}` : 'Enter your Telegram cloud password.'}</p>
+          <Steps current={step} />
           <label className="field">
             <input
               type="password"
@@ -159,6 +178,10 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
           </button>
         </form>
       )}
+
+      <footer className="app-footer">
+        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
+      </footer>
     </div>
   );
 }

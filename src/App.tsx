@@ -21,7 +21,7 @@ import ContextMenu, { type MenuItem } from './components/ContextMenu';
 import Login from './components/Login';
 import LinkTelegram from './components/LinkTelegram';
 import Sidebar, { type View } from './components/Sidebar';
-import Topbar, { type SortKey } from './components/Topbar';
+import Topbar, { type Layout, type SortKey } from './components/Topbar';
 import Toasts from './components/Toasts';
 import UploadPanel from './components/UploadPanel';
 import { ColorModal, ConfirmModal, MoveModal, NewFolderModal, PreviewModal, RenameModal, VaultModal } from './components/Modals';
@@ -54,6 +54,7 @@ export default function App() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [view, setView] = useState<View>({ type: 'folder', id: null });
   const [sort, setSort] = useState<SortKey>('name');
+  const [layout, setLayout] = useState<Layout>(() => (window.localStorage.getItem('telecloud-layout') === 'list' ? 'list' : 'grid'));
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -118,6 +119,10 @@ export default function App() {
     document.body.dataset.theme = theme;
     window.localStorage.setItem('telecloud-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem('telecloud-layout', layout);
+  }, [layout]);
 
   useEffect(() => {
     void boot();
@@ -434,8 +439,9 @@ export default function App() {
     return (
       <div className="splash">
         <div className="splash-mark">
-          <Cloud size={40} strokeWidth={2} />
+          <Cloud size={30} strokeWidth={2.2} />
         </div>
+        <span className="splash-text">Telecloud</span>
       </div>
     );
   }
@@ -444,6 +450,10 @@ export default function App() {
     return (
       <div className="splash">
         <div className="splash-error">
+          <div className="splash-mark still">
+            <Cloud size={30} strokeWidth={2.2} />
+          </div>
+          <h3>Can’t reach Telecloud</h3>
           <p>{loadError || 'The server did not respond.'}</p>
           <button className="btn primary" onClick={() => void boot()}>
             Try again
@@ -465,12 +475,24 @@ export default function App() {
 
   const state = emptyState();
   const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : view.type === 'vault' ? 'Secret Vault' : 'My Files';
+  const subtitle = searching
+    ? `Results for “${query.trim()}”`
+    : view.type === 'starred'
+      ? 'Things you reach for most'
+      : view.type === 'trash'
+        ? 'Items here can be restored or deleted forever'
+        : view.type === 'vault'
+          ? status.vaultUnlocked ? 'PIN-protected files, kept apart from your drive' : 'Unlock with your PIN to see what’s inside'
+          : crumbs.length > 0
+            ? ''
+            : telegramMode ? 'Stored safely in your Telegram account' : 'Your personal drive';
   const showUpload = !searching && view.type !== 'trash' && (view.type !== 'vault' || status.vaultUnlocked);
   const showNewFolder = !searching && (view.type === 'folder' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
   const canDropFiles = showUpload;
 
   return (
     <div className="shell">
+      <div className="workspace">
       <Sidebar
         status={status}
         entries={entries}
@@ -544,10 +566,13 @@ export default function App() {
         <Topbar
           crumbs={crumbs}
           title={title}
+          subtitle={subtitle}
           query={query}
           onQuery={setQuery}
           sort={sort}
           onSort={setSort}
+          layout={layout}
+          onLayout={setLayout}
           showUpload={showUpload}
           showNewFolder={showNewFolder}
           showEmptyTrash={!searching && view.type === 'trash'}
@@ -569,13 +594,18 @@ export default function App() {
           onNavigate={openFolder}
         />
 
-        {canDropFiles && <div className="drop-hint"><Upload size={14} /> Drop files anywhere here to upload</div>}
-
         {visible.length > 0 && (
           <div className="list-meta">
-            {foldersCount > 0 && pluralize(foldersCount, 'folder')}
-            {foldersCount > 0 && filesCount > 0 && ' · '}
-            {filesCount > 0 && pluralize(filesCount, 'file')}
+            <span>
+              {foldersCount > 0 && pluralize(foldersCount, 'folder')}
+              {foldersCount > 0 && filesCount > 0 && ' · '}
+              {filesCount > 0 && pluralize(filesCount, 'file')}
+            </span>
+            {canDropFiles && (
+              <span className="drop-hint">
+                <Upload size={13} /> Drop files anywhere to upload
+              </span>
+            )}
           </div>
         )}
 
@@ -602,12 +632,20 @@ export default function App() {
             )}
           </div>
         ) : (
-          <div className="grid">
+          <div className={layout === 'list' ? 'list' : 'grid'}>
+            {layout === 'list' && (
+              <div className="list-head" aria-hidden="true">
+                <span className="list-head-name">Name</span>
+                <span className="list-head-col">Size</span>
+                <span className="list-head-col">Modified</span>
+              </div>
+            )}
             {visible.map((entry) => (
               <EntryCard
                 key={entry.id}
                 entry={entry}
                 meta={cardMeta(entry, childCounts.get(entry.id) ?? 0)}
+                layout={layout}
                 onOpen={() => openEntry(entry)}
                 onToggleStar={() => void guard(() => api.patch(entry.id, { starred: !entry.starred }))}
                 onMenu={(event) => openMenu(event, entry)}
@@ -625,6 +663,11 @@ export default function App() {
           </div>
         )}
       </main>
+      </div>
+
+      <footer className="app-footer">
+        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
+      </footer>
 
       <input
         ref={fileInput}
@@ -642,7 +685,6 @@ export default function App() {
       {renderModal()}
       <UploadPanel uploads={uploads} onDismiss={(id) => setUploads((current) => current.filter((u) => u.id !== id))} />
       <Toasts toasts={toasts} />
-      <footer className="app-footer">© 2026 All rights reserved by Pritam Kumar Modak</footer>
     </div>
   );
 }

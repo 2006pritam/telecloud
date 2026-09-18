@@ -74,6 +74,35 @@ export function fileVisual(mime: string, name: string): FileVisual {
   return { Icon: File, tile: '#F2F1F7', fg: '#6E6A7F' };
 }
 
+export type FileCategory = 'images' | 'media' | 'docs' | 'other';
+
+/** Segments of the sidebar storage meter, in the fixed categorical color order. */
+export const FILE_CATEGORIES: { id: FileCategory; label: string }[] = [
+  { id: 'images', label: 'Images' },
+  { id: 'media', label: 'Media' },
+  { id: 'docs', label: 'Documents' },
+  { id: 'other', label: 'Other' },
+];
+
+export function fileCategory(mime: string, name: string): FileCategory {
+  const m = (mime || '').toLowerCase();
+  const ext = extensionOf(name);
+  if (m.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic', 'avif', 'bmp'].includes(ext)) return 'images';
+  if (m.startsWith('video/') || m.startsWith('audio/') || ['mp4', 'mkv', 'mov', 'webm', 'avi', 'mp3', 'wav', 'flac', 'm4a', 'ogg'].includes(ext))
+    return 'media';
+  if (
+    m === 'application/pdf' ||
+    m.startsWith('text/') ||
+    m.includes('document') ||
+    m.includes('spreadsheet') ||
+    m.includes('presentation') ||
+    m.includes('json') ||
+    ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf', 'odt', 'ods'].includes(ext)
+  )
+    return 'docs';
+  return 'other';
+}
+
 export type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | null;
 
 export function previewKind(mime: string): PreviewKind {
