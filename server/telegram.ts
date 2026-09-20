@@ -21,6 +21,14 @@ const CHUNK = 512 * 1024;
 export type Session = { session: string; userId: string; name: string; channelId: string; accessHash: string };
 
 export type LoginStep = { step: 'password'; hint: string; session: string } | { step: 'done'; session: Session };
+export type QrLoginResult =
+  | { step: 'pending'; token: string; expiresAt: number }
+  | { step: 'done'; session: Session };
+export type QrLogin = {
+  current: QrLoginResult;
+  poll: () => Promise<QrLoginResult>;
+  close: () => Promise<void>;
+};
 
 export class TelegramAuthError extends Error {
   constructor(message: string, public status = 400) {
@@ -80,6 +88,53 @@ async function connect(apiId: number, apiHash: string, session = ''): Promise<Te
     throw friendly(error);
   }
   return client;
+}
+
+/** Start a short-lived Telegram QR login and keep its client server-side. */
+export async function startQrLogin(apiId: number, apiHash: string): Promise<QrLogin> {
+  const client = await connect(apiId, apiHash);
+  let token = Buffer.alloc(0);
+  let expiresAt = 0;
+  let closed = false;
+
+  const exportToken = async (): Promise<QrLoginResult> => {
+    const result = await client.invoke(new Api.auth.ExportLoginToken({ apiId, apiHash, exceptIds: [] }));
+    if (result instanceof Api.auth.LoginToken) {
+      token = result.token;
+      expiresAt = result.expires * 1000;
+      return { step: 'pending', token: token.toString('base64url'), expiresAt };
+    }
+    if (result instanceof Api.auth.LoginTokenSuccess) return { step: 'done', session: await finish(client) };
+    if (result instanceof Api.auth.LoginTokenMigrateTo) {
+      const switchDc = (client as unknown as { _switchDC: (dcId: number) => Promise<void> })._switchDC;
+      await switchDc.call(client, result.dcId);
+      const migrated = await client.invoke(new Api.auth.ImportLoginToken({ token: result.token }));
+      if (migrated instanceof Api.auth.LoginTokenSuccess) return { step: 'done', session: await finish(client) };
+    }
+    throw new TelegramAuthError('Telegram could not create a QR login.', 502);
+  };
+
+  try {
+    const initial = await exportToken();
+    return {
+      current: initial,
+      poll: async () => {
+        if (closed) throw new TelegramAuthError('That QR login was cancelled.', 400);
+        try {
+          return await exportToken();
+        } catch (error) {
+          throw error instanceof TelegramAuthError ? error : friendly(error);
+        }
+      },
+      close: async () => {
+        closed = true;
+        await client.disconnect().catch(() => {});
+      },
+    };
+  } catch (error) {
+    await client.disconnect().catch(() => {});
+    throw error instanceof TelegramAuthError ? error : friendly(error);
+  }
 }
 
 /** Step 1 of linking an account: ask Telegram to send a login code. */

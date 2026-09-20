@@ -1704,6 +1704,24 @@ body[data-theme='dark'] .card-actions .icon-btn {
   margin: 4px 0 0;
 }
 
+.qr-frame {
+  width: 256px;
+  height: 256px;
+  margin: 2px auto 0;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 8px solid #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+}
+
+.qr-frame img {
+  display: block;
+  width: 240px;
+  height: 240px;
+}
+
 .steps {
   list-style: none;
   margin: -4px 0 2px;

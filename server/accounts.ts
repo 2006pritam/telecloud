@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Store } from './store.js';
-import { TelegramStorage, sendCode, signIn, checkPassword, type Session } from './telegram.js';
+import { TelegramStorage, sendCode, signIn, checkPassword, startQrLogin, type Session } from './telegram.js';
 import { NeonMetadata } from './neon.js';
 
 export type StorageClient = Pick<TelegramStorage, 'verify' | 'upload' | 'download' | 'renameFile' | 'deleteFile' | 'close'>;
@@ -9,11 +9,12 @@ export type TelegramBackend = {
   sendCode: typeof sendCode;
   signIn: typeof signIn;
   checkPassword: typeof checkPassword;
+  startQrLogin: typeof startQrLogin;
   createStorage: (apiId: number, apiHash: string, session: Session) => StorageClient;
 };
 
 export const telegramBackend: TelegramBackend = {
-  sendCode, signIn, checkPassword,
+  sendCode, signIn, checkPassword, startQrLogin,
   createStorage: (apiId, apiHash, session) => new TelegramStorage(apiId, apiHash, session),
 };
 

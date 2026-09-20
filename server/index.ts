@@ -10,7 +10,7 @@ import os from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { Store, type Entry } from './store.js';
-import { TelegramAuthError, MAX_FILE_BYTES } from './telegram.js';
+import { TelegramAuthError, MAX_FILE_BYTES, type QrLogin } from './telegram.js';
 import { Accounts, telegramBackend, type TelegramBackend, type Workspace, type StorageClient } from './accounts.js';
 import { BrowserSessions, SESSION_TTL, type BrowserSession } from './auth.js';
 import { NeonMetadata } from './neon.js';
@@ -217,6 +217,13 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     legacyHeaders: false,
     message: { error: 'Too many sign-in attempts. Try again in a few minutes.' },
   });
+  const qrPollLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many QR checks. Start a new login shortly.' },
+  });
   // Telegram punishes repeated code requests with long flood waits, so this
   // path is throttled harder than ordinary sign-in.
   const linkLimiter = rateLimit({
@@ -234,7 +241,12 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       const origin = req.get('origin');
       let foreignOrigin = false;
       if (origin) {
-        try { foreignOrigin = new URL(origin).host !== req.get('host'); } catch { foreignOrigin = true; }
+        try {
+          const parsed = new URL(origin);
+          const local = (host: string) => host === '127.0.0.1' || host === 'localhost' || host === '::1';
+          foreignOrigin = parsed.host !== req.get('host')
+            && !(local(parsed.hostname) && local(req.hostname));
+        } catch { foreignOrigin = true; }
       }
       if (foreignOrigin || req.get('sec-fetch-site') === 'cross-site') {
         return res.status(403).json({ error: 'Open Telecloud directly to continue.' });
@@ -493,11 +505,16 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   // --- Telegram account linking -------------------------------------------
   // Held in memory only: a half-finished auth key is as sensitive as the
   // finished one, and it should not outlive a server restart.
-  type Pending = { phone: string; session: string; phoneCodeHash: string; at: number; step: 'code' | 'password'; busy: boolean };
+  type Pending = { phone: string; session: string; phoneCodeHash: string; at: number; step: 'code' | 'password' | 'qr'; busy: boolean; qr?: QrLogin };
   const pending = new Map<string, Pending>();
   const PENDING_TTL = 10 * 60 * 1000;
   const prunePending = () => {
-    for (const [id, attempt] of pending) if (Date.now() - attempt.at > PENDING_TTL) pending.delete(id);
+    for (const [id, attempt] of pending) {
+      if (Date.now() - attempt.at > PENDING_TTL) {
+        pending.delete(id);
+        void attempt.qr?.close();
+      }
+    }
   };
   const pendingTimer = setInterval(prunePending, 60_000);
   pendingTimer.unref();
@@ -517,6 +534,46 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       throw new HttpError(400, 'That login attempt expired. Start again with your phone number.');
     }
   };
+
+  app.post('/api/telegram/qr/start', linkLimiter, wrap(async (req, res) => {
+    if (!configured) throw new HttpError(400, setup.hint ?? 'Set TELEGRAM_API_ID and TELEGRAM_API_HASH before linking an account.');
+    const previous = browserSession(req);
+    if (previous?.userId) throw new HttpError(409, 'Sign out before using a different Telegram account.');
+    if (previous && pending.get(previous.id)?.busy) throw new HttpError(409, 'Your sign-in is already being processed.');
+    const browser = issueSession(req, res, null, PENDING_TTL);
+    const current: Pending = { phone: '', session: '', phoneCodeHash: '', at: Date.now(), step: 'qr', busy: true };
+    prunePending();
+    pending.set(browser.id, current);
+    try {
+      current.qr = await backend.startQrLogin(apiId, apiHash);
+      if (pending.get(browser.id) !== current) throw new HttpError(400, 'That login attempt expired. Start again.');
+      res.json(current.qr.current);
+    } catch (error) {
+      if (pending.get(browser.id) === current) pending.delete(browser.id);
+      await current.qr?.close();
+      throw error;
+    } finally { current.busy = false; }
+  }));
+
+  app.get('/api/telegram/qr/poll', qrPollLimiter, wrap(async (req, res) => {
+    const { browser, current } = freshPending(req, 'qr');
+    if (!current.qr) throw new HttpError(400, 'That QR login is no longer available. Start again.');
+    current.busy = true;
+    try {
+      const result = await current.qr.poll();
+      assertActiveAttempt(req, browser, current);
+      if (result.step === 'pending') {
+        res.json(result);
+        return;
+      }
+      const account = await accounts.activate(result.session);
+      assertActiveAttempt(req, browser, current);
+      await current.qr.close();
+      pending.delete(browser.id);
+      issueSession(req, res, result.session.userId);
+      res.json({ step: 'done', telegram: account.telegram });
+    } finally { current.busy = false; }
+  }));
 
   app.post('/api/telegram/send-code', linkLimiter, wrap(async (req, res) => {
     if (!configured) throw new HttpError(400, setup.hint ?? 'Set TELEGRAM_API_ID and TELEGRAM_API_HASH before linking an account.');

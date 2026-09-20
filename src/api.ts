@@ -29,6 +29,12 @@ export const api = {
   login: (password: string) => req<{ ok: true }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   telegram: {
+    qrStart: () =>
+      req<{ step: 'pending'; token: string; expiresAt: number }>('/api/telegram/qr/start', { method: 'POST' }),
+    qrPoll: () =>
+      req<{ step: 'pending'; token: string; expiresAt: number } | { step: 'done'; telegram: Status['telegram'] }>(
+        '/api/telegram/qr/poll'
+      ),
     sendCode: (phone: string) =>
       req<{ step: 'code' }>('/api/telegram/send-code', { method: 'POST', body: JSON.stringify({ phone }) }),
     signIn: (code: string) =>
