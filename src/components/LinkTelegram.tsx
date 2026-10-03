@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Loader2, Phone, QrCode, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../api';
 import type { Status } from '../types';
+import Turnstile from './Turnstile';
 
 const STEPS = ['phone', 'code', 'password'] as const;
 type Step = (typeof STEPS)[number] | 'qr';
@@ -26,7 +27,7 @@ function Steps({ current }: { current: (typeof STEPS)[number] }) {
  * Each step posts to the server, which holds the half-finished auth key in
  * memory for this browser only; the Telegram session stays on the server.
  */
-export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status['telegram']) => void }) {
+export default function LinkTelegram({ onLinked, turnstileSiteKey }: { onLinked: (telegram: Status['telegram']) => void; turnstileSiteKey: string | null }) {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -36,6 +37,7 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
   const [busy, setBusy] = useState(false);
   const [qr, setQr] = useState<QrResult | null>(null);
   const [qrImage, setQrImage] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const restart = () => {
     setStep('phone');
@@ -45,6 +47,7 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
     setError('');
     setQr(null);
     setQrImage('');
+    setTurnstileToken('');
   };
 
   const run = async (action: () => Promise<void>) => {
@@ -64,10 +67,15 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
   const submitPhone = (event: React.FormEvent) => {
     event.preventDefault();
     void run(async () => {
-      await api.telegram.sendCode(phone);
+      await api.telegram.sendCode(phone, turnstileToken);
       setStep('code');
     });
   };
+
+  const turnstileError = useCallback(() => {
+    setTurnstileToken('');
+    setError('The security check could not be completed. Please try again.');
+  }, []);
 
   const startQr = () => {
     void run(async () => {
@@ -140,8 +148,11 @@ export default function LinkTelegram({ onLinked }: { onLinked: (telegram: Status
               onChange={(e) => setPhone(e.target.value)}
             />
           </label>
+          {turnstileSiteKey && (
+            <Turnstile siteKey={turnstileSiteKey} onToken={setTurnstileToken} onError={turnstileError} />
+          )}
           {error && <div className="form-error">{error}</div>}
-          <button className="btn primary block" type="submit" disabled={busy || !phone}>
+          <button className="btn primary block" type="submit" disabled={busy || !phone || (!!turnstileSiteKey && !turnstileToken)}>
             {busy && <Loader2 size={16} className="spin" />}
             {busy ? 'Sending code…' : 'Send login code'}
           </button>

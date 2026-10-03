@@ -26,10 +26,7 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   status: () => req<Status>('/api/auth/status'),
-  login: (password: string, turnstileToken?: string) => req<{ ok: true }>('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ password, ...(turnstileToken ? { turnstileToken } : {}) }),
-  }),
+  login: (password: string) => req<{ ok: true }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   telegram: {
     qrStart: () =>
@@ -38,8 +35,11 @@ export const api = {
       req<{ step: 'pending'; token: string; expiresAt: number } | { step: 'done'; telegram: Status['telegram'] }>(
         '/api/telegram/qr/poll'
       ),
-    sendCode: (phone: string) =>
-      req<{ step: 'code' }>('/api/telegram/send-code', { method: 'POST', body: JSON.stringify({ phone }) }),
+    sendCode: (phone: string, turnstileToken?: string) =>
+      req<{ step: 'code' }>('/api/telegram/send-code', {
+        method: 'POST',
+        body: JSON.stringify({ phone, ...(turnstileToken ? { turnstileToken } : {}) }),
+      }),
     signIn: (code: string) =>
       req<{ step: 'password'; hint?: string } | { step: 'done'; telegram: Status['telegram'] }>(
         '/api/telegram/sign-in',

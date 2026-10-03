@@ -75,7 +75,7 @@ TRUST_PROXY=1                         # only when there is exactly one trusted p
 
 `APP_PASSWORD` is an optional extra gate before Telegram sign-in. Leave it blank for open registration. In local demo mode, there is no Telegram authentication and the demo workspace is shared; set a site password if exposing that demo.
 
-When both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, the site-password login form requires a successful Cloudflare Turnstile challenge. The server verifies the token directly with Cloudflare; leaving either value blank disables the optional challenge.
+When both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, the Telegram phone-number login form requires a successful Cloudflare Turnstile challenge before Telecloud asks Telegram to send a login code. The server verifies the token directly with Cloudflare; leaving either value blank disables the optional challenge. `APP_PASSWORD` is not required for Turnstile.
 
 Cookies contain random opaque tokens, never Telegram credentials. Only token hashes are stored in the session database. Cookies are `httpOnly` and `sameSite=lax`; `COOKIE_SECURE=true` requires HTTPS. Signing out invalidates the token on the server. Keep `SESSION_SECRET` stable across restarts; changing it invalidates existing browser cookies. Without an explicit secret, changing `APP_PASSWORD` also invalidates cookies.
 

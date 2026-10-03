@@ -1,11 +1,9 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { Cloud, KeyRound, Loader2 } from 'lucide-react';
 import { api } from '../api';
-import Turnstile from './Turnstile';
 
-export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void; turnstileSiteKey: string | null }) {
+export default function Login({ onDone }: { onDone: () => void }) {
   const [password, setPassword] = useState('');
-  const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -15,7 +13,7 @@ export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void
     setBusy(true);
     setError('');
     try {
-      await api.login(password, turnstileToken);
+      await api.login(password);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed.');
@@ -23,11 +21,6 @@ export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void
       setBusy(false);
     }
   };
-
-  const turnstileError = useCallback(() => {
-    setTurnstileToken('');
-    setError('The security check could not be completed. Please try again.');
-  }, []);
 
   return (
     <div className="login-screen">
@@ -47,11 +40,8 @@ export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
-        {turnstileSiteKey && (
-          <Turnstile siteKey={turnstileSiteKey} onToken={setTurnstileToken} onError={turnstileError} />
-        )}
         {error && <div className="form-error">{error}</div>}
-        <button className="btn primary block" type="submit" disabled={busy || !password || (!!turnstileSiteKey && !turnstileToken)}>
+        <button className="btn primary block" type="submit" disabled={busy || !password}>
           {busy && <Loader2 size={16} className="spin" />}
           {busy ? 'Signing in…' : 'Sign in'}
         </button>

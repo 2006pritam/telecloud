@@ -464,13 +464,13 @@ export default function App() {
   }
 
   if (needsLogin) {
-    return <Login turnstileSiteKey={status.turnstileSiteKey} onDone={() => { notifyAuthChanged(); void boot(); }} />;
+    return <Login onDone={() => { notifyAuthChanged(); void boot(); }} />;
   }
 
   // Telegram is configured but no account is linked yet: nothing can be stored
   // until the user completes the phone-code flow.
   if (status && status.configured && !status.linked) {
-    return <LinkTelegram onLinked={() => { notifyAuthChanged(); void boot(); }} />;
+    return <LinkTelegram turnstileSiteKey={status.turnstileSiteKey} onLinked={() => { notifyAuthChanged(); void boot(); }} />;
   }
 
   const state = emptyState();

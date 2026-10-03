@@ -26,7 +26,9 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const API_ID = process.env.TELEGRAM_API_ID?.trim() || '';
 const API_HASH = process.env.TELEGRAM_API_HASH?.trim() || '';
-const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY?.trim() || '';
+// Public key for the existing Cloudflare Turnstile widget. It is safe to expose
+// to the browser; the private secret remains a Render environment variable.
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY?.trim() || '0x4AAAAAAFM-hBK_rFx8HX7-';
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY?.trim() || '';
 const COOKIE = 'telecloud_session';
 const DEMO_MAX_BYTES = 512 * 1024 * 1024;
@@ -88,7 +90,6 @@ class HttpError extends Error {
 
 const loginSchema = z.object({
   password: z.string().min(1, 'Enter your password.').max(256, 'That password is too long.'),
-  turnstileToken: z.string().max(4096).optional(),
 });
 
 const folderSchema = z.object({
@@ -108,6 +109,7 @@ const patchSchema = z
 
 const phoneSchema = z.object({
   phone: z.string().trim().regex(/^\+?[0-9 ()-]{6,20}$/, 'Enter a phone number with its country code, like +15551234567.'),
+  turnstileToken: z.string().max(4096).optional(),
 });
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{4,7}$/, 'Login codes are 5 digits.') });
 const twoFactorSchema = z.object({ password: z.string().min(1, 'Enter your two-step verification password.').max(256) });
@@ -510,8 +512,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   });
 
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
-    const { password: candidate, turnstileToken } = loginSchema.parse(req.body ?? {});
-    await verifyTurnstile(turnstileToken, req);
+    const { password: candidate } = loginSchema.parse(req.body ?? {});
     const given = createHash('sha256').update(candidate).digest();
     const expected = createHash('sha256').update(password).digest();
     if (!timingSafeEqual(given, expected)) throw new HttpError(401, 'Incorrect password. Try again.');
@@ -606,7 +607,8 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
 
   app.post('/api/telegram/send-code', linkLimiter, wrap(async (req, res) => {
     if (!configured) throw new HttpError(400, setup.hint ?? 'Set TELEGRAM_API_ID and TELEGRAM_API_HASH before linking an account.');
-    const { phone } = phoneSchema.parse(req.body ?? {});
+    const { phone, turnstileToken } = phoneSchema.parse(req.body ?? {});
+    await verifyTurnstile(turnstileToken, req);
     const normalized = phone.replace(/[^\d+]/g, '');
     const previous = browserSession(req);
     if (previous?.userId) throw new HttpError(409, 'Sign out before using a different Telegram account.');
