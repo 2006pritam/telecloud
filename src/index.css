@@ -1692,6 +1692,14 @@ body[data-theme='dark'] .card-actions .icon-btn {
   text-align: left;
 }
 
+.turnstile-widget {
+  min-height: 65px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 4px 0 0;
+}
+
 .login-note {
   margin: 4px 0 0;
   font-size: 12px;

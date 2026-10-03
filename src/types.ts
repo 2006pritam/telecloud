@@ -28,6 +28,8 @@ export type Status = {
   linked: boolean;
   telegram: { account: string; channel: string } | null;
   maxUploadBytes: number;
+  /** Public Cloudflare Turnstile site key, or null when the challenge is disabled. */
+  turnstileSiteKey: string | null;
   vaultConfigured: boolean;
   vaultUnlocked: boolean;
 };

@@ -26,7 +26,10 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   status: () => req<Status>('/api/auth/status'),
-  login: (password: string) => req<{ ok: true }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (password: string, turnstileToken?: string) => req<{ ok: true }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ password, ...(turnstileToken ? { turnstileToken } : {}) }),
+  }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   telegram: {
     qrStart: () =>

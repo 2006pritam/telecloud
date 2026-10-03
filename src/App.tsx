@@ -464,7 +464,7 @@ export default function App() {
   }
 
   if (needsLogin) {
-    return <Login onDone={() => { notifyAuthChanged(); void boot(); }} />;
+    return <Login turnstileSiteKey={status.turnstileSiteKey} onDone={() => { notifyAuthChanged(); void boot(); }} />;
   }
 
   // Telegram is configured but no account is linked yet: nothing can be stored

@@ -26,6 +26,8 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 const API_ID = process.env.TELEGRAM_API_ID?.trim() || '';
 const API_HASH = process.env.TELEGRAM_API_HASH?.trim() || '';
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY?.trim() || '';
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY?.trim() || '';
 const COOKIE = 'telecloud_session';
 const DEMO_MAX_BYTES = 512 * 1024 * 1024;
 
@@ -86,6 +88,7 @@ class HttpError extends Error {
 
 const loginSchema = z.object({
   password: z.string().min(1, 'Enter your password.').max(256, 'That password is too long.'),
+  turnstileToken: z.string().max(4096).optional(),
 });
 
 const folderSchema = z.object({
@@ -121,6 +124,8 @@ export type AppOptions = {
   trustProxy?: number;
   /** Where in-flight uploads are staged. Defaults to a folder in the OS temp directory. */
   uploadDir?: string;
+  turnstileSiteKey?: string;
+  turnstileSecretKey?: string;
 };
 
 export type AppInfo = {
@@ -136,6 +141,9 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   const backend = options.telegramBackend ?? telegramBackend;
   const secret = options.sessionSecret || SESSION_SECRET || password;
   const secureCookies = options.secureCookies ?? process.env.COOKIE_SECURE === 'true';
+  const turnstileSiteKey = options.turnstileSiteKey ?? TURNSTILE_SITE_KEY;
+  const turnstileSecretKey = options.turnstileSecretKey ?? TURNSTILE_SECRET_KEY;
+  const turnstileEnabled = Boolean(turnstileSiteKey && turnstileSecretKey);
 
   // With usable API credentials the app stores in Telegram; without them it
   // runs a self-contained local demo so the UI is explorable before linking.
@@ -271,6 +279,25 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   const browserSession = (req: Request) => sessions.get(readCookie(req, COOKIE));
   const siteAuthed = (req: Request) => !password || !!browserSession(req)?.siteAccess;
   const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: '/' };
+
+  async function verifyTurnstile(token: string | undefined, req: Request) {
+    if (!turnstileEnabled) return;
+    if (!token) throw new HttpError(400, 'Complete the security check and try again.');
+    const body = new URLSearchParams({ secret: turnstileSecretKey, response: token });
+    const forwardedFor = req.get('cf-connecting-ip') || req.ip;
+    if (forwardedFor) body.set('remoteip', forwardedFor);
+    try {
+      const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      const result = await response.json() as { success?: boolean };
+      if (!response.ok || !result.success) throw new Error('Turnstile rejected the challenge.');
+    } catch {
+      throw new HttpError(400, 'Security check failed. Please try again.');
+    }
+  }
 
   function issueSession(req: Request, res: Response, userId: string | null, ttl = SESSION_TTL): BrowserSession {
     const previous = browserSession(req);
@@ -476,13 +503,15 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       linked: !!account?.storage,
       telegram: account?.telegram ?? null,
       maxUploadBytes: maxUpload,
+      turnstileSiteKey: turnstileEnabled ? turnstileSiteKey : null,
       vaultConfigured: !!store?.getSetting('vault_pin'),
       vaultUnlocked: vaultUnlocked(req),
     });
   });
 
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
-    const { password: candidate } = loginSchema.parse(req.body ?? {});
+    const { password: candidate, turnstileToken } = loginSchema.parse(req.body ?? {});
+    await verifyTurnstile(turnstileToken, req);
     const given = createHash('sha256').update(candidate).digest();
     const expected = createHash('sha256').update(password).digest();
     if (!timingSafeEqual(given, expected)) throw new HttpError(401, 'Incorrect password. Try again.');
