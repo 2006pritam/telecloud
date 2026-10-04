@@ -3,7 +3,10 @@ import type { Entry, Status } from './types';
 export const CANCELED = '__canceled__';
 export const AUTH_EXPIRED = 'telecloud:auth-expired';
 export const AUTH_CHANGED = 'telecloud:auth-changed';
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+// The Render URL is public. Keep it as a fallback so a Pages build remains
+// connected to the production API even if a Pages environment variable is
+// accidentally omitted; VITE_API_BASE_URL still overrides it per environment.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://telecloud-xkas.onrender.com').replace(/\/$/, '');
 
 function apiUrl(path: string) {
   return `${API_BASE}${path}`;
