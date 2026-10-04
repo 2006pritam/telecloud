@@ -1,19 +1,21 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Cloud, KeyRound, Loader2 } from 'lucide-react';
 import { api } from '../api';
+import Turnstile from './Turnstile';
 
-export default function Login({ onDone }: { onDone: () => void }) {
+export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void; turnstileSiteKey?: string | null }) {
   const [password, setPassword] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (busy) return;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
     setBusy(true);
     setError('');
     try {
-      await api.login(password);
+      await api.login(password, turnstileToken);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed.');
@@ -21,6 +23,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
       setBusy(false);
     }
   };
+
+  const turnstileError = useCallback(() => {
+    setTurnstileToken('');
+    setError('The security check could not be completed. Please try again.');
+  }, []);
 
   return (
     <div className="login-screen">
@@ -34,21 +41,25 @@ export default function Login({ onDone }: { onDone: () => void }) {
           <KeyRound size={16} />
           <input
             type="password"
-            value={password}
-            placeholder="Password"
             autoFocus
+            placeholder="Site password"
+            value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </label>
+        {turnstileSiteKey && (
+          <Turnstile siteKey={turnstileSiteKey} onToken={setTurnstileToken} onError={turnstileError} />
+        )}
         {error && <div className="form-error">{error}</div>}
-        <button className="btn primary block" type="submit" disabled={busy || !password}>
+        <button
+          className="btn primary block"
+          type="submit"
+          disabled={busy || !password || (!!turnstileSiteKey && !turnstileToken)}
+        >
           {busy && <Loader2 size={16} className="spin" />}
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-      <footer className="app-footer">
-        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
-      </footer>
     </div>
   );
 }

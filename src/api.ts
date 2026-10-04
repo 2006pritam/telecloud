@@ -3,10 +3,17 @@ import type { Entry, Status } from './types';
 export const CANCELED = '__canceled__';
 export const AUTH_EXPIRED = 'telecloud:auth-expired';
 export const AUTH_CHANGED = 'telecloud:auth-changed';
-// The Render URL is public. Keep it as a fallback so a Pages build remains
-// connected to the production API even if a Pages environment variable is
-// accidentally omitted; VITE_API_BASE_URL still overrides it per environment.
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://telecloud-xkas.onrender.com').replace(/\/$/, '');
+
+// On Cloudflare Pages (*.pages.dev), default to relative '' so requests route through
+// Cloudflare Pages Functions and _redirects proxy, eliminating cross-origin CORS errors.
+// VITE_API_BASE_URL still overrides it per environment.
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL !== undefined
+    ? import.meta.env.VITE_API_BASE_URL
+    : (typeof window !== 'undefined' && window.location.hostname.endsWith('pages.dev')
+        ? ''
+        : 'https://telecloud-xkas.onrender.com')
+).replace(/\/$/, '');
 
 function apiUrl(path: string) {
   return `${API_BASE}${path}`;
@@ -17,30 +24,42 @@ export function notifyAuthChanged() {
   try { localStorage.setItem(AUTH_CHANGED, crypto.randomUUID()); } catch { /* Storage may be disabled. */ }
 }
 
-async function req<T>(url: string, init?: RequestInit): Promise<T> {
+async function req<T>(url: string, init?: RequestInit, retries = 2): Promise<T> {
   const target = apiUrl(url);
-  const res = await fetch(target, {
-    ...init,
-    credentials: 'include',
-    headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
-  });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) {
-    if (res.status === 401 && !url.startsWith('/api/auth/') && !url.startsWith('/api/telegram/')) {
-      window.dispatchEvent(new Event(AUTH_EXPIRED));
+  try {
+    const res = await fetch(target, {
+      ...init,
+      credentials: 'include',
+      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+    });
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) {
+      if (res.status === 401 && !url.startsWith('/api/auth/') && !url.startsWith('/api/telegram/')) {
+        window.dispatchEvent(new Event(AUTH_EXPIRED));
+      }
+      throw new Error(data.error || `Request failed (${res.status}).`);
     }
-    throw new Error(data.error || `Request failed (${res.status}).`);
+    return data;
+  } catch (err) {
+    if (retries > 0 && (!init?.method || init.method === 'GET')) {
+      await new Promise((r) => setTimeout(r, 1500));
+      return req<T>(url, init, retries - 1);
+    }
+    throw err;
   }
-  return data;
 }
 
 export const api = {
   status: () => req<Status>('/api/auth/status'),
-  login: (password: string) => req<{ ok: true }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (password: string, turnstileToken?: string) =>
+    req<{ ok: true }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password, ...(turnstileToken ? { turnstileToken } : {}) }),
+    }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
   telegram: {
     qrStart: () =>
-      req<{ step: 'pending'; token: string; expiresAt: number }>('/api/telegram/qr/start', { method: 'POST' }),
+      req<{ qrToken: string; expiresAt: number }>('/api/telegram/qr/start', { method: 'POST' }),
     qrPoll: () =>
       req<{ step: 'pending'; token: string; expiresAt: number } | { step: 'done'; telegram: Status['telegram'] }>(
         '/api/telegram/qr/poll'
@@ -62,26 +81,28 @@ export const api = {
       }),
     unlink: () => req<{ ok: true }>('/api/telegram/unlink', { method: 'POST' }),
   },
+  vault: {
+    unlock: (pin: string) =>
+      req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/unlock', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      }),
+    lock: () => req<{ ok: true; vaultUnlocked: false }>('/api/vault/lock', { method: 'POST' }),
+  },
   entries: () => req<{ entries: Entry[] }>('/api/entries'),
-  createFolder: (name: string, color: string, parentId: string | null, vault = false) =>
-    req<{ entry: Entry }>('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parentId, vault }) }),
+  createFolder: (name: string, color: string, parentId: string | null) =>
+    req<{ entry: Entry }>('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parentId }) }),
   patch: (id: string, patch: Record<string, unknown>) =>
     req<{ entry: Entry }>(`/api/entries/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   remove: (id: string, permanent = false) =>
     req<{ ok: true }>(`/api/entries/${id}${permanent ? '?permanent=1' : ''}`, { method: 'DELETE' }),
   restore: (id: string) => req<{ entry: Entry }>(`/api/entries/${id}/restore`, { method: 'POST' }),
   purge: () => req<{ ok: true }>('/api/trash/purge', { method: 'POST' }),
-  vault: {
-    setup: (pin: string) => req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/setup', { method: 'POST', body: JSON.stringify({ pin }) }),
-    unlock: (pin: string) => req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ pin }) }),
-    lock: () => req<{ ok: true; vaultUnlocked: false }>('/api/vault/lock', { method: 'POST' }),
-  },
   downloadUrl: (id: string) => apiUrl(`/api/files/${id}/download`),
   rawUrl: (id: string) => apiUrl(`/api/files/${id}/raw`),
   upload(
     file: File,
     parentId: string | null,
-    vault: boolean,
     onProgress: (percent: number) => void,
     onRegister?: (abort: () => void) => void
   ): Promise<Entry> {
@@ -89,7 +110,6 @@ export const api = {
       const form = new FormData();
       form.append('file', file);
       if (parentId) form.append('parentId', parentId);
-      if (vault) form.append('vault', 'true');
       const xhr = new XMLHttpRequest();
       xhr.open('POST', apiUrl('/api/files'));
       xhr.withCredentials = true;
