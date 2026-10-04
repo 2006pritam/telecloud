@@ -3,6 +3,7 @@ import {
   Cloud,
   Download,
   Eye,
+  ExternalLink,
   FolderInput,
   FolderOpen,
   FolderPlus,
@@ -24,12 +25,14 @@ import Sidebar, { type View } from './components/Sidebar';
 import Topbar, { type Layout, type SortKey } from './components/Topbar';
 import Toasts from './components/Toasts';
 import UploadPanel from './components/UploadPanel';
-import { ColorModal, ConfirmModal, MoveModal, NewFolderModal, PreviewModal, RenameModal, VaultModal } from './components/Modals';
+import { ColorModal, ConfirmModal, LinkModal, MoveModal, NewFolderModal, PreviewModal, RenameModal, VaultModal } from './components/Modals';
 import { formatBytes, pluralize } from './util';
 
 type ModalState =
   | { kind: 'newFolder' }
+  | { kind: 'newLink' }
   | { kind: 'rename'; entry: Entry }
+  | { kind: 'editLink'; entry: Entry }
   | { kind: 'color'; entry: Entry }
   | { kind: 'move'; entry: Entry }
   | { kind: 'preview'; entry: Entry }
@@ -174,7 +177,8 @@ export default function App() {
     const q = query.trim().toLowerCase();
     let items: Entry[];
     if (q) items = entries.filter((e) => !e.deleted_at && e.name.toLowerCase().includes(q));
-    else if (view.type === 'folder') items = entries.filter((e) => !e.deleted_at && !e.vault && e.parent_id === view.id);
+    else if (view.type === 'folder') items = entries.filter((e) => !e.deleted_at && !e.vault && e.kind !== 'link' && e.parent_id === view.id);
+    else if (view.type === 'links') items = entries.filter((e) => !e.deleted_at && e.kind === 'link');
     else if (view.type === 'vault') items = entries.filter((e) => !e.deleted_at && e.vault && e.parent_id === null);
     else if (view.type === 'starred') items = entries.filter((e) => !e.deleted_at && e.starred);
     else items = entries.filter((e) => !!e.deleted_at && !e.trash_root);
@@ -188,6 +192,7 @@ export default function App() {
 
   const foldersCount = visible.filter((e) => e.kind === 'folder').length;
   const filesCount = visible.filter((e) => e.kind === 'file').length;
+  const linksCount = visible.filter((e) => e.kind === 'link').length;
   const hasTrash = entries.some((e) => !!e.deleted_at);
   const telegramMode = status?.mode === 'telegram';
   const searching = query.trim().length > 0;
@@ -201,6 +206,7 @@ export default function App() {
     (entry: Entry) => {
       if (entry.deleted_at) return;
       if (entry.kind === 'folder') openFolder(entry.id);
+      else if (entry.kind === 'link') window.open(entry.url, '_blank', 'noopener,noreferrer');
       else setModal({ kind: 'preview', entry });
     },
     [openFolder]
@@ -323,6 +329,13 @@ export default function App() {
               link.click();
             },
           });
+        } else if (entry.kind === 'link') {
+          items.push({
+            icon: ExternalLink,
+            label: 'Open link',
+            onClick: () => window.open(entry.url, '_blank', 'noopener,noreferrer'),
+          });
+          items.push({ icon: Pencil, label: 'Edit link', onClick: () => setModal({ kind: 'editLink', entry }) });
         } else {
           items.push({ icon: FolderOpen, label: 'Open', onClick: () => openEntry(entry) });
         }
@@ -365,6 +378,35 @@ export default function App() {
             onClose={() => setModal(null)}
             onRename={async (name) => {
               await api.patch(modal.entry.id, { name });
+              await refresh();
+              setModal(null);
+            }}
+          />
+        );
+      case 'newLink':
+        return (
+          <LinkModal
+            title="New link"
+            submitLabel="Save link"
+            onClose={() => setModal(null)}
+            onSubmit={async (linkTitle, url) => {
+              await api.createLink(linkTitle, url, view.type === 'vault');
+              await refresh();
+              toast(`Link “${linkTitle}” saved.`, 'success');
+              setModal(null);
+            }}
+          />
+        );
+      case 'editLink':
+        return (
+          <LinkModal
+            title={`Edit “${modal.entry.name}”`}
+            submitLabel="Save changes"
+            initialTitle={modal.entry.name}
+            initialUrl={modal.entry.url}
+            onClose={() => setModal(null)}
+            onSubmit={async (linkTitle, url) => {
+              await api.patch(modal.entry.id, { name: linkTitle, url });
               await refresh();
               setModal(null);
             }}
@@ -429,6 +471,7 @@ export default function App() {
     }
     if (view.type === 'starred') return { title: 'No starred items', hint: 'Star the things you reach for most.' };
     if (view.type === 'trash') return { title: 'Trash is empty', hint: 'Deleted items will wait here until you empty it.' };
+    if (view.type === 'links') return { title: 'No links yet', hint: 'Save your favorite links and open them directly.' };
     if (view.type === 'folder' && view.id) return { title: 'This folder is quiet', hint: 'Drop files here or press Upload.' };
     if (entries.length === 0)
       return { title: 'A little space for everything', hint: 'Create your first folder or upload a file to get started.' };
@@ -474,20 +517,23 @@ export default function App() {
   }
 
   const state = emptyState();
-  const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : view.type === 'vault' ? 'Secret Vault' : 'My Files';
+  const title = searching ? 'Search' : view.type === 'starred' ? 'Starred' : view.type === 'trash' ? 'Trash' : view.type === 'vault' ? 'Secret Vault' : view.type === 'links' ? 'Link Vault' : 'My Files';
   const subtitle = searching
     ? `Results for “${query.trim()}”`
     : view.type === 'starred'
       ? 'Things you reach for most'
       : view.type === 'trash'
         ? 'Items here can be restored or deleted forever'
-        : view.type === 'vault'
+      : view.type === 'links'
+        ? 'Save link titles and open websites instantly'
+      : view.type === 'vault'
           ? status.vaultUnlocked ? 'PIN-protected files, kept apart from your drive' : 'Unlock with your PIN to see what’s inside'
           : crumbs.length > 0
             ? ''
             : telegramMode ? 'Stored safely in your Telegram account' : 'Your personal drive';
-  const showUpload = !searching && view.type !== 'trash' && (view.type !== 'vault' || status.vaultUnlocked);
+  const showUpload = !searching && (view.type === 'folder' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
   const showNewFolder = !searching && (view.type === 'folder' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
+  const showNewLink = !searching && (view.type === 'links' || view.type === 'vault') && (view.type !== 'vault' || status.vaultUnlocked);
   const canDropFiles = showUpload;
 
   return (
@@ -575,10 +621,12 @@ export default function App() {
           onLayout={setLayout}
           showUpload={showUpload}
           showNewFolder={showNewFolder}
+          showNewLink={showNewLink}
           showEmptyTrash={!searching && view.type === 'trash'}
           hasTrash={hasTrash}
           onUpload={() => fileInput.current?.click()}
           onNewFolder={() => setModal({ kind: 'newFolder' })}
+          onNewLink={() => setModal({ kind: 'newLink' })}
           onEmptyTrash={() =>
             setModal({
               kind: 'confirm',
@@ -600,6 +648,8 @@ export default function App() {
               {foldersCount > 0 && pluralize(foldersCount, 'folder')}
               {foldersCount > 0 && filesCount > 0 && ' · '}
               {filesCount > 0 && pluralize(filesCount, 'file')}
+              {(foldersCount > 0 || filesCount > 0) && linksCount > 0 && ' · '}
+              {linksCount > 0 && pluralize(linksCount, 'link')}
             </span>
             {canDropFiles && (
               <span className="drop-hint">
@@ -626,6 +676,12 @@ export default function App() {
                   <button className="btn ghost" onClick={() => setModal({ kind: 'newFolder' })}>
                     <FolderPlus size={15} />
                     New folder
+                  </button>
+                )}
+                {showNewLink && (
+                  <button className="btn ghost" onClick={() => setModal({ kind: 'newLink' })}>
+                    <ExternalLink size={15} />
+                    New link
                   </button>
                 )}
               </div>

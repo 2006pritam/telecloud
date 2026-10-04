@@ -1,12 +1,13 @@
 export type Entry = {
   id: string;
   name: string;
-  kind: 'file' | 'folder';
+  kind: 'file' | 'folder' | 'link';
   parent_id: string | null;
   mime: string;
   size: number;
   color: string;
   starred: boolean;
+  url: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

@@ -1,4 +1,4 @@
-import { ArrowDownAZ, CalendarClock, ChevronRight, FolderPlus, HardDrive, LayoutGrid, List, Search, Trash2, Upload, X } from 'lucide-react';
+import { ArrowDownAZ, CalendarClock, ChevronRight, FolderPlus, HardDrive, LayoutGrid, Link2, List, Search, Trash2, Upload, X } from 'lucide-react';
 import type { Entry } from '../types';
 
 export type SortKey = 'name' | 'date' | 'size';
@@ -22,10 +22,12 @@ type TopbarProps = {
   onLayout: (value: Layout) => void;
   showUpload: boolean;
   showNewFolder: boolean;
+  showNewLink?: boolean;
   showEmptyTrash: boolean;
   hasTrash: boolean;
   onUpload: () => void;
   onNewFolder: () => void;
+  onNewLink?: () => void;
   onEmptyTrash: () => void;
   onNavigate: (folderId: string | null) => void;
 };
@@ -42,10 +44,12 @@ export default function Topbar({
   onLayout,
   showUpload,
   showNewFolder,
+  showNewLink,
   showEmptyTrash,
   hasTrash,
   onUpload,
   onNewFolder,
+  onNewLink,
   onEmptyTrash,
   onNavigate,
 }: TopbarProps) {
@@ -135,6 +139,12 @@ export default function Topbar({
           <button className="btn ghost" onClick={onNewFolder}>
             <FolderPlus size={15} />
             New folder
+          </button>
+        )}
+        {showNewLink && onNewLink && (
+          <button className="btn ghost" onClick={onNewLink}>
+            <Link2 size={15} />
+            New link
           </button>
         )}
         {showUpload && (

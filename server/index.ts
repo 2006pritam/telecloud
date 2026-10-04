@@ -98,6 +98,13 @@ const folderSchema = z.object({
   color: z.enum(FOLDER_COLORS).optional(),
   parentId: z.string().nullable().optional(),
 });
+const linkUrlSchema = z.string().trim().url('Enter a valid link URL.').max(2048, 'Links are limited to 2048 characters.')
+  .refine((value) => /^https?:\/\//i.test(value), 'Links must start with http:// or https://.');
+const linkSchema = z.object({
+  title: z.string().trim().min(1, 'Give the link a title.').max(120, 'Link titles are limited to 120 characters.'),
+  url: linkUrlSchema,
+  vault: z.boolean().optional(),
+});
 
 const patchSchema = z
   .object({
@@ -105,6 +112,7 @@ const patchSchema = z
     color: z.enum(FOLDER_COLORS).optional(),
     starred: z.boolean().optional(),
     parentId: z.string().nullable().optional(),
+    url: linkUrlSchema.optional(),
   })
   .refine((value) => Object.keys(value).length > 0, { message: 'Nothing to update.' });
 
@@ -798,6 +806,23 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     }
   }));
 
+  app.post('/api/links', wrap(async (req, res) => {
+    const { store } = workspace(req);
+    const input = linkSchema.parse(req.body ?? {});
+    if (input.vault && !vaultUnlocked(req)) throw new HttpError(423, 'Unlock the Secret Vault first.');
+    const entry = store.insert({
+      name: input.title,
+      kind: 'link',
+      mime: 'text/uri-list',
+      size: 0,
+      parent_id: null,
+      vault: input.vault ? 1 : 0,
+      url: input.url,
+    });
+    await storeWorkspace(req);
+    res.status(201).json({ entry: store.publicEntry(entry) });
+  }));
+
   app.patch('/api/entries/:id', wrap(async (req, res) => {
     const { store, storage } = workspace(req);
     const entry = findEntry(store, pathId(req));
@@ -816,6 +841,10 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     }
 
     if (input.starred !== undefined) store.update(entry.id, { starred: input.starred ? 1 : 0 });
+    if (input.url !== undefined) {
+      if (entry.kind !== 'link') throw new HttpError(400, 'Only links can be edited this way.');
+      store.update(entry.id, { url: input.url });
+    }
 
     if (input.parentId !== undefined) {
       // Moving is a metadata change only — the file never leaves its channel.

@@ -72,6 +72,8 @@ export const api = {
   entries: () => req<{ entries: Entry[] }>('/api/entries'),
   createFolder: (name: string, color: string, parentId: string | null, vault = false) =>
     req<{ entry: Entry }>('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parentId, vault }) }),
+  createLink: (title: string, url: string, vault = false) =>
+    req<{ entry: Entry }>('/api/links', { method: 'POST', body: JSON.stringify({ title, url, vault }) }),
   patch: (id: string, patch: Record<string, unknown>) =>
     req<{ entry: Entry }>(`/api/entries/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   remove: (id: string, permanent = false) =>
