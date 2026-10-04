@@ -142,73 +142,6 @@ export function RenameModal({
       setError(err instanceof Error ? err.message : 'Could not rename.');
       setBusy(false);
     }
-
-    export function LinkModal({
-      title,
-      submitLabel,
-      initialTitle = '',
-      initialUrl = '',
-      onSubmit,
-      onClose,
-    }: {
-      title: string;
-      submitLabel: string;
-      initialTitle?: string;
-      initialUrl?: string;
-      onSubmit: (linkTitle: string, url: string) => Promise<void>;
-      onClose: () => void;
-    }) {
-      const [linkTitle, setLinkTitle] = useState(initialTitle);
-      const [url, setUrl] = useState(initialUrl);
-      const [busy, setBusy] = useState(false);
-      const [error, setError] = useState('');
-
-      const submit = async () => {
-        if (busy || !linkTitle.trim() || !url.trim()) return;
-        setBusy(true);
-        setError('');
-        try {
-          await onSubmit(linkTitle.trim(), url.trim());
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Could not save link.');
-          setBusy(false);
-        }
-      };
-
-      return (
-        <Modal title={title} icon={<Link2 size={16} />} onClose={onClose}>
-          <label className="field">
-            <Pencil size={15} />
-            <input
-              value={linkTitle}
-              placeholder="Link title"
-              autoFocus
-              onChange={(e) => setLinkTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void submit()}
-            />
-          </label>
-          <label className="field">
-            <Link2 size={15} />
-            <input
-              value={url}
-              placeholder="https://example.com"
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void submit()}
-            />
-          </label>
-          {error && <div className="form-error">{error}</div>}
-          <div className="modal-actions">
-            <button className="btn ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button className="btn primary" onClick={() => void submit()} disabled={busy || !linkTitle.trim() || !url.trim()}>
-              {busy && <Loader2 size={15} className="spin" />}
-              {submitLabel}
-            </button>
-          </div>
-        </Modal>
-      );
-    }
   };
 
   return (
@@ -230,6 +163,73 @@ export function RenameModal({
         <button className="btn primary" onClick={submit} disabled={busy || !name.trim()}>
           {busy && <Loader2 size={15} className="spin" />}
           Save
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+export function LinkModal({
+  title,
+  submitLabel,
+  initialTitle = '',
+  initialUrl = '',
+  onSubmit,
+  onClose,
+}: {
+  title: string;
+  submitLabel: string;
+  initialTitle?: string;
+  initialUrl?: string;
+  onSubmit: (linkTitle: string, url: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [linkTitle, setLinkTitle] = useState(initialTitle);
+  const [url, setUrl] = useState(initialUrl);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    if (busy || !linkTitle.trim() || !url.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onSubmit(linkTitle.trim(), url.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save link.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={title} icon={<Link2 size={16} />} onClose={onClose}>
+      <label className="field">
+        <Pencil size={15} />
+        <input
+          value={linkTitle}
+          placeholder="Link title"
+          autoFocus
+          onChange={(e) => setLinkTitle(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void submit()}
+        />
+      </label>
+      <label className="field">
+        <Link2 size={15} />
+        <input
+          value={url}
+          placeholder="https://example.com"
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void submit()}
+        />
+      </label>
+      {error && <div className="form-error">{error}</div>}
+      <div className="modal-actions">
+        <button className="btn ghost" onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn primary" onClick={() => void submit()} disabled={busy || !linkTitle.trim() || !url.trim()}>
+          {busy && <Loader2 size={15} className="spin" />}
+          {submitLabel}
         </button>
       </div>
     </Modal>
