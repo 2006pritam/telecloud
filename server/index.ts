@@ -18,6 +18,7 @@ import { NeonMetadata } from './neon.js';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 3001);
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || '').split(',').map((value) => value.trim()).filter(Boolean);
 const DATA_DIR = process.env.DATA_DIR || './data';
 // Containers give /tmp a small ephemeral layer, which a 2 GB upload can fill.
 // Point this at the same volume as DATA_DIR when deploying.
@@ -213,6 +214,20 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(express.json({ limit: '256kb' }));
 
+  const allowedOrigin = (origin: string | undefined) => !!origin && FRONTEND_ORIGINS.includes(origin);
+  app.use('/api', (req, res, next) => {
+    const origin = req.get('origin');
+    if (allowedOrigin(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin!);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PATCH,DELETE,OPTIONS');
+      if (req.method === 'OPTIONS') return res.status(204).end();
+    }
+    next();
+  });
+
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 1500,
@@ -255,6 +270,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
           const parsed = new URL(origin);
           const local = (host: string) => host === '127.0.0.1' || host === 'localhost' || host === '::1';
           foreignOrigin = parsed.host !== req.get('host')
+            && !allowedOrigin(origin)
             && !(local(parsed.hostname) && local(req.hostname));
         } catch { foreignOrigin = true; }
       }
@@ -280,7 +296,13 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
 
   const browserSession = (req: Request) => sessions.get(readCookie(req, COOKIE));
   const siteAuthed = (req: Request) => !password || !!browserSession(req)?.siteAccess;
-  const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: '/' };
+  const crossOriginCookies = FRONTEND_ORIGINS.length > 0;
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: (crossOriginCookies ? 'none' : 'lax') as 'none' | 'lax',
+    secure: secureCookies || crossOriginCookies,
+    path: '/',
+  };
 
   async function verifyTurnstile(token: string | undefined, req: Request) {
     if (!turnstileEnabled) return;

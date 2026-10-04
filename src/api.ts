@@ -3,6 +3,11 @@ import type { Entry, Status } from './types';
 export const CANCELED = '__canceled__';
 export const AUTH_EXPIRED = 'telecloud:auth-expired';
 export const AUTH_CHANGED = 'telecloud:auth-changed';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
+function apiUrl(path: string) {
+  return `${API_BASE}${path}`;
+}
 
 export function notifyAuthChanged() {
   // Notify other tabs without storing any account credentials in localStorage.
@@ -10,8 +15,10 @@ export function notifyAuthChanged() {
 }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const target = apiUrl(url);
+  const res = await fetch(target, {
     ...init,
+    credentials: 'include',
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -66,8 +73,8 @@ export const api = {
     unlock: (pin: string) => req<{ ok: true; vaultConfigured: true; vaultUnlocked: true }>('/api/vault/unlock', { method: 'POST', body: JSON.stringify({ pin }) }),
     lock: () => req<{ ok: true; vaultUnlocked: false }>('/api/vault/lock', { method: 'POST' }),
   },
-  downloadUrl: (id: string) => `/api/files/${id}/download`,
-  rawUrl: (id: string) => `/api/files/${id}/raw`,
+  downloadUrl: (id: string) => apiUrl(`/api/files/${id}/download`),
+  rawUrl: (id: string) => apiUrl(`/api/files/${id}/raw`),
   upload(
     file: File,
     parentId: string | null,
@@ -81,7 +88,8 @@ export const api = {
       if (parentId) form.append('parentId', parentId);
       if (vault) form.append('vault', 'true');
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/files');
+      xhr.open('POST', apiUrl('/api/files'));
+      xhr.withCredentials = true;
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
       };

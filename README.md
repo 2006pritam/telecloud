@@ -92,6 +92,28 @@ This compiles the frontend to `dist/`, the API to `dist-server/`, and serves eve
 
 For a real deployment, use HTTPS (Caddy, nginx, or a tunnel) and `COOKIE_SECURE=true`. Preserve the original `Host` header at the proxy. Configure `TRUST_PROXY` for your actual proxy topology so login rate limits use client IP addresses.
 
+### Render backend + Cloudflare Pages frontend
+
+The frontend can be deployed separately to Cloudflare Pages while the API and Telegram sessions remain on Render.
+
+On Render, set:
+
+```env
+HOST=0.0.0.0
+COOKIE_SECURE=true
+FRONTEND_ORIGIN=https://your-project.pages.dev
+TURNSTILE_SITE_KEY=your-existing-site-key
+TURNSTILE_SECRET_KEY=your-private-secret-key
+```
+
+On Cloudflare Pages, set this build variable:
+
+```env
+VITE_API_BASE_URL=https://your-service.onrender.com
+```
+
+If a custom frontend domain is used, put that exact HTTPS origin in `FRONTEND_ORIGIN` without a trailing slash. Render uses credentialed CORS and secure `SameSite=None` cookies for the split deployment. Add the exact Pages hostname to the existing Turnstile widget’s allowed hostnames, then redeploy both services.
+
 ## Scripts
 
 | Command             | What it does                                  |
