@@ -5,9 +5,10 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export type Entry = {
-  id: string; name: string; kind: 'file' | 'folder'; parent_id: string | null;
+  id: string; name: string; kind: 'file' | 'folder' | 'link'; parent_id: string | null;
   mime: string; size: number; color: string; starred: number;
   vault: number;
+  url: string;
   message_id: number | null; local_path: string | null;
   created_at: string; updated_at: string; deleted_at: string | null; trash_root: string | null;
 };
@@ -29,18 +30,20 @@ export class Store {
       mime TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
       color TEXT NOT NULL DEFAULT 'purple', starred INTEGER NOT NULL DEFAULT 0,
       vault INTEGER NOT NULL DEFAULT 0,
+      url TEXT NOT NULL DEFAULT '',
       message_id INTEGER, local_path TEXT,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT, trash_root TEXT
     ); CREATE INDEX IF NOT EXISTS entries_parent ON entries(parent_id);
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
     try { this.db.exec('ALTER TABLE entries ADD COLUMN vault INTEGER NOT NULL DEFAULT 0'); } catch { /* existing schema already migrated */ }
+    try { this.db.exec("ALTER TABLE entries ADD COLUMN url TEXT NOT NULL DEFAULT ''"); } catch { /* existing schema already migrated */ }
   }
   close() { this.db.close(); }
   all(): Entry[] { return this.db.prepare('SELECT * FROM entries ORDER BY created_at DESC').all() as unknown as Entry[]; }
   get(id: string): Entry | undefined { return this.db.prepare('SELECT * FROM entries WHERE id=?').get(id) as Entry | undefined; }
   insert(input: Partial<Entry> & Pick<Entry, 'name' | 'kind'>): Entry {
     const now = new Date().toISOString();
-    const entry: Entry = { id: randomUUID(), parent_id: null, mime: '', size: 0, color: 'purple', starred: 0, vault: 0,
+    const entry: Entry = { id: randomUUID(), parent_id: null, mime: '', size: 0, color: 'purple', starred: 0, vault: 0, url: '',
       message_id: null, local_path: null, created_at: now,
       updated_at: now, deleted_at: null, trash_root: null, ...input };
     const keys = Object.keys(entry);
@@ -48,7 +51,7 @@ export class Store {
     return entry;
   }
   update(id: string, patch: Partial<Entry>) {
-    const allowed = new Set(['name', 'parent_id', 'starred', 'message_id', 'deleted_at', 'trash_root', 'color']);
+    const allowed = new Set(['name', 'parent_id', 'starred', 'message_id', 'deleted_at', 'trash_root', 'color', 'url']);
     const pairs = Object.entries(patch).filter(([key]) => allowed.has(key));
     pairs.push(['updated_at', new Date().toISOString()]);
     this.db.prepare(`UPDATE entries SET ${pairs.map(([key]) => `${key}=?`).join(',')} WHERE id=?`).run(...pairs.map(([, value]) => value as string | number | null), id);
@@ -109,11 +112,11 @@ export class Store {
       this.db.exec('BEGIN');
       this.db.exec('DELETE FROM entries; DELETE FROM settings;');
       const insertEntry = this.db.prepare(`INSERT INTO entries
-        (id,name,kind,parent_id,mime,size,color,starred,vault,message_id,local_path,created_at,updated_at,deleted_at,trash_root)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        (id,name,kind,parent_id,mime,size,color,starred,vault,url,message_id,local_path,created_at,updated_at,deleted_at,trash_root)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       for (const entry of snapshot.entries) {
         insertEntry.run(entry.id, entry.name, entry.kind, entry.parent_id, entry.mime, entry.size, entry.color, entry.starred ? 1 : 0,
-          entry.vault ? 1 : 0, entry.message_id, entry.local_path, entry.created_at, entry.updated_at, entry.deleted_at, entry.trash_root);
+          entry.vault ? 1 : 0, entry.url ?? '', entry.message_id, entry.local_path, entry.created_at, entry.updated_at, entry.deleted_at, entry.trash_root);
       }
       const setSetting = this.db.prepare('INSERT INTO settings(key,value) VALUES (?,?)');
       for (const [key, value] of Object.entries(snapshot.settings)) setSetting.run(key, value);

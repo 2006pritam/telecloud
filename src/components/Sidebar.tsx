@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { Cloud, FolderClosed, LockKeyhole, LogOut, Moon, ShieldCheck, Star, Sun, Trash2, UnlockKeyhole } from 'lucide-react';
+import { Cloud, FolderClosed, Link2, LockKeyhole, LogOut, Moon, ShieldCheck, Star, Sun, Trash2, UnlockKeyhole } from 'lucide-react';
 import type { Entry, Status } from '../types';
 import { FILE_CATEGORIES, fileCategory, formatBytes, pluralize, type FileCategory } from '../util';
 
-export type View = { type: 'folder'; id: string | null } | { type: 'starred' } | { type: 'trash' } | { type: 'vault' };
+export type View = { type: 'folder'; id: string | null } | { type: 'starred' } | { type: 'trash' } | { type: 'vault' } | { type: 'links' };
 
 type SidebarProps = {
   status: Status;
@@ -23,6 +23,7 @@ export default function Sidebar({ status, entries, view, theme, onToggleTheme, o
   const live = useMemo(() => entries.filter((e) => !e.deleted_at), [entries]);
   const starredCount = live.filter((e) => e.starred).length;
   const trashCount = entries.filter((e) => !!e.deleted_at && !e.trash_root).length;
+  const linksCount = live.filter((e) => e.kind === 'link').length;
 
   const storage = useMemo(() => {
     const files = live.filter((e) => e.kind === 'file');
@@ -72,6 +73,11 @@ export default function Sidebar({ status, entries, view, theme, onToggleTheme, o
           <Trash2 size={18} />
           <span>Trash</span>
           {trashCount > 0 && <span className="nav-count">{trashCount}</span>}
+        </button>
+        <button className={navItem(view.type === 'links')} onClick={() => onNavigate({ type: 'links' })}>
+          <Link2 size={18} />
+          <span>Link Vault</span>
+          {linksCount > 0 && <span className="nav-count">{linksCount}</span>}
         </button>
 
         <span className="nav-heading">Private</span>

@@ -1,4 +1,4 @@
-import { Folder, MoreHorizontal, Star } from 'lucide-react';
+import { Folder, Link2, MoreHorizontal, Star } from 'lucide-react';
 import type { Entry } from '../types';
 import { fileVisual, folderColor, formatBytes, formatDate } from '../util';
 
@@ -33,6 +33,8 @@ export default function EntryCard({ entry, meta, layout = 'grid', onOpen, onTogg
       <div className="card-tile" style={tileStyle}>
         {visual ? (
           <visual.Icon size={layout === 'list' ? 20 : 30} strokeWidth={1.7} />
+        ) : entry.kind === 'link' ? (
+          <Link2 size={layout === 'list' ? 20 : 30} strokeWidth={1.9} />
         ) : (
           <Folder size={layout === 'list' ? 20 : 30} strokeWidth={1.9} fill={color.soft} />
         )}
@@ -50,7 +52,7 @@ export default function EntryCard({ entry, meta, layout = 'grid', onOpen, onTogg
         </div>
       )}
       <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-        {entry.kind === 'file' && (
+        {entry.kind !== 'folder' && (
           <button
             className={`icon-btn star${entry.starred ? ' on' : ''}`}
             onClick={onToggleStar}
@@ -69,5 +71,12 @@ export default function EntryCard({ entry, meta, layout = 'grid', onOpen, onTogg
 
 export function cardMeta(entry: Entry, childCount: number): string {
   if (entry.kind === 'folder') return childCount === 1 ? '1 item' : `${childCount} items`;
+  if (entry.kind === 'link') {
+    try {
+      return new URL(entry.url).hostname;
+    } catch {
+      return 'Saved link';
+    }
+  }
   return `${formatBytes(entry.size)} · ${formatDate(entry.updated_at)}`;
 }
