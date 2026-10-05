@@ -283,7 +283,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
             && !(local(parsed.hostname) && local(req.hostname));
         } catch { foreignOrigin = true; }
       }
-      if (foreignOrigin || req.get('sec-fetch-site') === 'cross-site') {
+      if (foreignOrigin || (req.get('sec-fetch-site') === 'cross-site' && !allowedOrigin(origin))) {
         return res.status(403).json({ error: 'Open Telecloud directly to continue.' });
       }
     }
