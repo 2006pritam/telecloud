@@ -715,7 +715,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
   }));
 
   app.post('/api/integrations/frontpage/upload', upload.single('file'), wrap(async (req, res) => {
-    const token = req.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+    const token = (req.get('authorization')?.replace(/^Bearer\s+/i, '').trim() || req.body?.telecloudToken)?.trim();
     const grant = token && frontpageTokens.get(token);
     if (!grant || grant.expiresAt < Date.now()) {
       if (token) frontpageTokens.delete(token);
