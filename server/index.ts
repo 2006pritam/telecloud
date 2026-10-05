@@ -171,6 +171,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     demo.persist = () => neon.save('demo', demo.store);
   }
   const requestWorkspaces = new WeakMap<Request, Workspace>();
+  const frontpageTokens = new Map<string, { userId: string; expiresAt: number }>();
   const unlockedVaults = new Set<string>();
   function workspace(req: Request): Workspace {
     const current = requestWorkspaces.get(req);
@@ -700,6 +701,41 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
     await accounts.unlink(browser.userId);
     res.clearCookie(COOKIE, cookieOptions);
     res.json({ ok: true });
+  }));
+
+  app.post('/api/integrations/frontpage/authorize', wrap(async (req, res) => {
+    const input = z.object({ returnTo: z.string().url().max(2048), state: z.string().min(16).max(256) }).parse(req.body ?? {});
+    if (!FRONTEND_ORIGINS.includes(new URL(input.returnTo).origin)) throw new HttpError(403, 'That Frontpage Builder origin is not allowed.');
+    const browser = browserSession(req);
+    if (!browser?.userId || !accounts.get(browser.userId).storage) throw new HttpError(401, 'Sign in with Telegram before connecting Frontpage Builder.');
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = Date.now() + 10 * 60 * 1000;
+    frontpageTokens.set(token, { userId: browser.userId, expiresAt });
+    res.json({ token, expiresAt });
+  }));
+
+  app.post('/api/integrations/frontpage/upload', upload.single('file'), wrap(async (req, res) => {
+    const token = req.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+    const grant = token && frontpageTokens.get(token);
+    if (!grant || grant.expiresAt < Date.now()) {
+      if (token) frontpageTokens.delete(token);
+      discard(req.file);
+      throw new HttpError(401, 'Connect Frontpage Builder to Telecloud again.');
+    }
+    frontpageTokens.delete(token);
+    const account = accounts.get(grant.userId);
+    const file = req.file;
+    if (!account.storage) { discard(file); throw new HttpError(401, 'Your Telegram connection is no longer active.'); }
+    requestWorkspaces.set(req, account);
+    if (!file) throw new HttpError(400, 'Choose a file to upload.');
+    try {
+      const name = cleanName(file.originalname);
+      const mime = file.mimetype || 'application/octet-stream';
+      const sent = await account.storage.upload(file.path, name, file.size, mime);
+      const entry = account.store.insert({ name, kind: 'file', mime, size: sent.size, parent_id: null, message_id: sent.messageId, vault: 0 });
+      await account.persist?.();
+      res.status(201).json({ entry: account.store.publicEntry(entry) });
+    } finally { discard(file); }
   }));
 
   // Every drive route resolves its database from the verified browser identity.

@@ -140,6 +140,22 @@ export default function App() {
     };
   }, [boot]);
 
+  useEffect(() => {
+    if (!status?.authed) return;
+    const params = new URLSearchParams(window.location.search);
+    const returnTo = params.get('frontpage_return');
+    const state = params.get('state');
+    if (!returnTo || !state) return;
+    void api.frontpage.authorize(returnTo, state)
+      .then(({ token }) => {
+        const target = new URL(returnTo);
+        target.searchParams.set('telecloud_token', token);
+        target.searchParams.set('state', state);
+        window.location.assign(target.toString());
+      })
+      .catch((err) => toast(err instanceof Error ? err.message : 'Could not connect Frontpage Builder.', 'error'));
+  }, [status, toast]);
+
   const refresh = useCallback(async () => {
     const epoch = sessionEpoch.current;
     try {

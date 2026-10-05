@@ -45,6 +45,12 @@ export const api = {
       body: JSON.stringify({ password, ...(turnstileToken ? { turnstileToken } : {}) }),
     }),
   logout: () => req<{ ok: true }>('/api/auth/logout', { method: 'POST' }),
+  frontpage: {
+    authorize: (returnTo: string, state: string) => req<{ token: string; expiresAt: number }>('/api/integrations/frontpage/authorize', {
+      method: 'POST',
+      body: JSON.stringify({ returnTo, state }),
+    }),
+  },
   telegram: {
     qrStart: () =>
       req<{ step: 'pending'; token: string; expiresAt: number }>('/api/telegram/qr/start', { method: 'POST' }),

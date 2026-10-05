@@ -112,7 +112,9 @@ On Cloudflare Pages, set this build variable:
 VITE_API_BASE_URL=https://your-service.onrender.com
 ```
 
-If a custom frontend domain is used, put that exact HTTPS origin in `FRONTEND_ORIGIN` without a trailing slash. Render uses credentialed CORS and secure `SameSite=None` cookies for the split deployment. Add the exact Pages hostname to the existing Turnstile widget’s allowed hostnames, then redeploy both services.
+If a custom frontend domain is used, put that exact HTTPS origin in `FRONTEND_ORIGIN` without a trailing slash. For the Frontpage Builder one-time connection, include its origin too, comma-separated. Render uses credentialed CORS and secure `SameSite=None` cookies for the split deployment. Add the exact Pages hostname to the existing Turnstile widget’s allowed hostnames, then redeploy both services.
+
+The Frontpage Builder connection uses a short-lived, single-use bearer token. It does not expose Telegram credentials or reuse a Telecloud browser cookie in the builder.
 
 ## Scripts
 
