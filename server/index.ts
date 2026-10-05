@@ -230,7 +230,7 @@ export async function createApp(options: AppOptions = {}): Promise<AppInfo> {
       res.setHeader('Access-Control-Allow-Origin', origin!);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Vary', 'Origin');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PATCH,DELETE,OPTIONS');
       if (req.method === 'OPTIONS') return res.status(204).end();
     }
