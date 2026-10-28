@@ -246,7 +246,7 @@ export default function LinkTelegram({ onLinked, turnstileSiteKey }: { onLinked:
       )}
 
       <footer className="app-footer">
-        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
+        <span>© 2026 All rights reserved by Surajit Sarkar</span>
       </footer>
     </div>
   );

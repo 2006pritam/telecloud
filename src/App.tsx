@@ -738,7 +738,7 @@ export default function App() {
       </div>
 
       <footer className="app-footer">
-        <span>© 2026 All rights reserved by Pritam Kumar Modak</span>
+        <span>© 2026 All rights reserved by Surajit Sarkar</span>
       </footer>
 
       <input
