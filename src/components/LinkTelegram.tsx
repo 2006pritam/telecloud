@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { Loader2, Phone, QrCode, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../api';
 import type { Status } from '../types';
+import BinaryRain from './BinaryRain';
 import Turnstile from './Turnstile';
 
 const STEPS = ['phone', 'code', 'password'] as const;
@@ -127,7 +128,8 @@ export default function LinkTelegram({ onLinked, turnstileSiteKey }: { onLinked:
   };
 
   return (
-    <div className="login-screen">
+    <div className="login-screen binary-login-screen">
+      <BinaryRain />
       {step === 'phone' && (
         <form className="login-card" onSubmit={submitPhone}>
           <div className="login-mark">

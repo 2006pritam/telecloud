@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Cloud, KeyRound, Loader2 } from 'lucide-react';
 import { api } from '../api';
+import BinaryRain from './BinaryRain';
 import Turnstile from './Turnstile';
 
 export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void; turnstileSiteKey?: string | null }) {
@@ -30,7 +31,8 @@ export default function Login({ onDone, turnstileSiteKey }: { onDone: () => void
   }, []);
 
   return (
-    <div className="login-screen">
+    <div className="login-screen binary-login-screen">
+      <BinaryRain />
       <form className="login-card" onSubmit={submit}>
         <div className="login-mark">
           <Cloud size={30} strokeWidth={2.2} />
